@@ -26,7 +26,7 @@ export const CONFIG = {
    *               home page, so it is reachable only by URL.
    */
   mounts: [
-    { prefix: '/lab', view: 'repo-browser', label: 'itrmo', repoPrefix: 'itmo-', unlisted: true },
+    { prefix: '/lab', view: 'repo-browser', label: 'itmo', repoPrefix: 'itmo-', unlisted: true },
     // { prefix: '/drafts', view: 'repo-browser', label: 'Drafts', unlisted: true },
   ],
 
