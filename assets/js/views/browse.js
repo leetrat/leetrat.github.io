@@ -84,6 +84,6 @@ export async function renderBrowse(route, ctx) {
     return shell;
   }
 
-  shell.append(await renderFile({ repo, manifest, path: result.path, entry: result.entry }));
+  shell.append(await renderFile({ mount, repo, manifest, path: result.path, entry: result.entry }));
   return shell;
 }

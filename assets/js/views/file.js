@@ -1,12 +1,60 @@
-/** Plain text and image files. */
+/** Markdown, plain text and image files. */
 
 import { el } from '../lib/dom.js';
 import { CONFIG } from '../config.js';
 import { cdnUrl, rawUrl, readFile, githubUrl } from '../lib/github.js';
-import { formatBytes, isImage, isBinary } from '../lib/format.js';
+import { formatBytes, isImage, isBinary, isMarkdown } from '../lib/format.js';
+import { mountPath } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
+import { renderMarkdown, isAbsolute } from '../lib/markdown.js';
 
-export async function renderFile({ repo, manifest, path, entry }) {
+/** Collapse `.` and `..` segments so a reference becomes a clean repo path. */
+function join(dir, reference) {
+  const stack = [];
+  for (const part of `${dir}${reference}`.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') stack.pop();
+    else stack.push(part);
+  }
+  return stack.join('/');
+}
+
+/**
+ * A markdown reference is resolved relative to the file that contains it, and
+ * root relative (`/img/x.png`) against the repository root. Absolute URLs are
+ * left alone.
+ */
+function repoPath(dir, reference) {
+  const clean = reference.replace(/^\.\//, '');
+  return clean.startsWith('/') ? join('', clean) : join(dir, clean);
+}
+
+function resolveMarkdownLink(href, { mount, repo, dir }) {
+  if (!href || href.startsWith('#')) return { href: href || '#', external: false };
+  if (isAbsolute(href)) return { href, external: true };
+
+  const [target, hash = ''] = href.split('#');
+  if (!target) return { href: `#${hash}`, external: false };
+
+  const path = mountPath(mount, repo, repoPath(dir, target));
+  return { href: hash ? `${path}#${hash}` : path, external: false };
+}
+
+/**
+ * Resolvers the markdown renderer needs for one file: links become site routes
+ * so navigation stays client side, images are served from the CDN.
+ */
+export function markdownResolvers({ mount, repo, manifest, path }) {
+  const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+
+  return {
+    dir,
+    imageUrl: (src) => (isAbsolute(src) ? src : cdnUrl(manifest.repo, manifest.branch, repoPath(dir, src))),
+    resolveLink: (href) => resolveMarkdownLink(href, { mount, repo, dir }),
+  };
+}
+
+export async function renderFile({ mount, repo, manifest, path, entry }) {
   const cdn = cdnUrl(manifest.repo, manifest.branch, path);
   const raw = rawUrl(manifest.repo, manifest.branch, path);
 
@@ -42,6 +90,13 @@ export async function renderFile({ repo, manifest, path, entry }) {
       el('p', { class: 'panel-hint' }, t('file.tooLarge.hint', { size: formatBytes(entry?.size || 0) })),
       meta,
       el('a', { class: 'btn', href: url, rel: 'external' }, t('common.openRaw')),
+    );
+  }
+
+  if (isMarkdown(path)) {
+    return el('section', { class: 'panel panel-markdown' },
+      meta,
+      renderMarkdown(text, markdownResolvers({ mount, repo, manifest, path })),
     );
   }
 

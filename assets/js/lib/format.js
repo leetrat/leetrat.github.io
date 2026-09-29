@@ -38,6 +38,10 @@ export function isImage(path) {
   return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg', 'bmp', 'ico'].includes(extension(path));
 }
 
+export function isMarkdown(path) {
+  return ['md', 'markdown', 'mdown', 'mkd'].includes(extension(path));
+}
+
 /**
  * Extensions that are never worth showing as text. Everything else is assumed
  * to be text, which is the right guess for extensionless files such as
