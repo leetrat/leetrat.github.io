@@ -1,0 +1,205 @@
+/**
+ * Repository access.
+ *
+ * A repository is described by one manifest request to jsDelivr
+ * (`/v1/package/gh/owner/repo@branch/flat`) which returns every file in the
+ * repository. That single payload powers directory listings, subpath traversal
+ * and file type dispatch without any further metadata requests. File bytes are
+ * then streamed straight from the CDN.
+ */
+
+import { CONFIG } from '../config.js';
+import { getJson, getText, readPersistent, writePersistent, HttpError } from './net.js';
+import { repoMatches } from './router.js';
+import { compareEntries } from './format.js';
+
+const OWNER = CONFIG.owner;
+
+/** Memory cache for the lifetime of a tab, on top of the localStorage cache. */
+const manifests = new Map();
+
+export function encodePath(path) {
+  return String(path || '')
+    .split('/')
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join('/');
+}
+
+export function cdnUrl(repo, branch, path = '') {
+  const tail = encodePath(path);
+  const base = `${CONFIG.sources.cdn}/${encodeURIComponent(OWNER)}/${encodeURIComponent(repo)}@${encodeURIComponent(branch)}`;
+  return tail ? `${base}/${tail}` : base;
+}
+
+export function rawUrl(repo, branch, path = '') {
+  const tail = encodePath(path);
+  const base = `${CONFIG.sources.raw}/${encodeURIComponent(OWNER)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}`;
+  return tail ? `${base}/${tail}` : base;
+}
+
+/**
+ * URL of a directory, always with a trailing slash so it can be used as the
+ * `href` of a `<base>` element. `encodePath` drops the trailing slash, so it
+ * has to be restored here.
+ */
+export function cdnDirUrl(repo, branch, dir = '') {
+  const base = cdnUrl(repo, branch, dir);
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+export function rawDirUrl(repo, branch, dir = '') {
+  const base = rawUrl(repo, branch, dir);
+  return base.endsWith('/') ? base : `${base}/`;
+}
+
+export function githubUrl(repo, path = '', branch = '') {
+  const base = `https://github.com/${OWNER}/${repo}`;
+  const ref = branch ? `/${encodeURIComponent(branch)}` : '';
+  if (!path) return `${base}${ref || '/tree/HEAD'}`;
+  return path.includes('/') ? `${base}/tree${ref}/${path}` : `${base}/blob${ref}/${path}`;
+}
+
+/** Branches to probe, most likely first. */
+function candidateBranches(repo, hint) {
+  const remembered = readPersistent(`branch:${OWNER}/${repo}`);
+  return [...new Set([hint, remembered, ...CONFIG.repoBrowser.branchFallbacks].filter(Boolean))];
+}
+
+function buildManifest(repo, branch, data) {
+  const files = new Map();
+  for (const file of data?.files || []) {
+    if (file?.type && file.type !== 'file') continue;
+    const path = String(file.name || '').replace(/^\/+/, '');
+    if (path) files.set(path, { path, size: file.size ?? 0, hash: file.hash ?? null });
+  }
+  return { repo, branch, owner: OWNER, files };
+}
+
+/**
+ * Load the file manifest for a repository, probing branches until one exists.
+ * Throws an HttpError with kind `not-found` when the repository is unknown or
+ * empty.
+ */
+export async function getManifest(repo, { branch: hint } = {}) {
+  const key = hint ? `${repo}@${hint}` : repo;
+  if (manifests.has(key)) return manifests.get(key);
+
+  const branches = candidateBranches(repo, hint);
+  let lastError = null;
+
+  for (const branch of branches) {
+    const url = `${CONFIG.sources.manifest}/${OWNER}/${repo}@${branch}/flat`;
+    try {
+      const { data, stale } = await getJson(url, { ttl: CONFIG.cache.manifestTtlMs });
+      const manifest = buildManifest(repo, branch, data);
+      writePersistent(`branch:${OWNER}/${repo}`, branch);
+      manifests.set(key, manifest);
+      if (stale) manifest.stale = true;
+      return manifest;
+    } catch (error) {
+      // A rate limit is worth surfacing immediately; anything else is a
+      // "this branch does not exist" probe and the next one is tried.
+      if (error.kind === 'rate-limit') throw error;
+      lastError = error;
+    }
+  }
+
+  throw new HttpError(
+    'not-found',
+    `No readable content for ${OWNER}/${repo} on ${branches.join(' or ')}. ` +
+      'The repository may be empty, renamed or private.',
+    { cause: lastError },
+  );
+}
+
+/** Immediate children of `dir`, directories first. */
+export function listDir(manifest, dir = '') {
+  const base = dir ? `${dir}/` : '';
+  const entries = new Map();
+
+  for (const [path, meta] of manifest.files) {
+    if (!path.startsWith(base)) continue;
+    const rest = path.slice(base.length);
+    if (!rest) continue;
+
+    const slash = rest.indexOf('/');
+    if (slash === -1) {
+      entries.set(rest, { name: rest, type: 'file', size: meta.size });
+    } else {
+      const name = rest.slice(0, slash);
+      if (!entries.has(name)) entries.set(name, { name, type: 'dir' });
+    }
+  }
+
+  return [...entries.values()].sort(compareEntries);
+}
+
+export function indexHtmlOf(entries) {
+  return entries.find((entry) => entry.type === 'file' && /^index\.html?$/i.test(entry.name)) || null;
+}
+
+/** Classify a repository path as a directory, a file, or missing. */
+export function resolvePath(manifest, path = '') {
+  const clean = String(path || '').replace(/^\/+|\/+$/g, '');
+
+  if (clean === '') return { kind: 'dir', path: '', entries: listDir(manifest, '') };
+
+  const file = manifest.files.get(clean);
+  if (file) return { kind: 'file', path: clean, entry: file };
+
+  const prefix = `${clean}/`;
+  for (const path of manifest.files.keys()) {
+    if (path.startsWith(prefix)) return { kind: 'dir', path: clean, entries: listDir(manifest, clean) };
+  }
+
+  return { kind: 'missing', path: clean };
+}
+
+/** Read a file's text, falling back to raw.githubusercontent.com. */
+export async function readFile(manifest, path, options = {}) {
+  const candidates = [cdnUrl(manifest.repo, manifest.branch, path), rawUrl(manifest.repo, manifest.branch, path)];
+
+  let lastError = null;
+  for (const url of candidates) {
+    try {
+      const result = await getText(url, options);
+      return { ...result, url: result.url || url };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Repository list for a mount, either pinned in config or fetched from the
+ * GitHub API, restricted to the repositories the mount serves.
+ */
+export async function listRepos(mount = {}) {
+  const pinned = CONFIG.repoBrowser.pinned;
+  if (pinned) {
+    return pinned
+      .filter((repo) => repoMatches(mount, repo.name))
+      .map((repo) => ({ name: repo.name, description: repo.description || '', branch: repo.branch || null }));
+  }
+
+  const url = `${CONFIG.sources.api}/users/${encodeURIComponent(OWNER)}/repos?per_page=100&sort=updated`;
+  const { data, stale } = await getJson(url, { ttl: CONFIG.cache.reposTtlMs, key: `repos:${OWNER}` });
+  const repos = Array.isArray(data) ? data : [];
+
+  return repos
+    .filter((repo) => CONFIG.repoBrowser.includeForks || !repo.fork)
+    .filter((repo) => repoMatches(mount, repo.name))
+    .map((repo) => ({
+      name: repo.name,
+      description: repo.description || '',
+      branch: repo.default_branch || null,
+      language: repo.language || '',
+      updated: repo.pushed_at || repo.updated_at || '',
+      size: repo.size || 0,
+      homepage: repo.homepage || '',
+      archived: Boolean(repo.archived),
+    }))
+    .map((repo) => (stale ? { ...repo, stale: true } : repo));
+}
