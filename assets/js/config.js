@@ -41,7 +41,7 @@ export const CONFIG = {
    *   label: { en: 'Label', ru: 'Название' }
    */
   mounts: [
-    { prefix: '/lab', view: 'repo-browser', label: {en: 'Labs', ru: 'Лабораторные'}, repoPrefix: 'itmo-', unlisted: true },
+    { prefix: '/lab', view: 'repo-browser', label: {en: 'Labs', ru: 'Лабораторные'}, repoPrefix: 'itmo-', unlisted: false },
     // { prefix: '/drafts', view: 'repo-browser', label: 'Drafts', unlisted: true },
   ],
 

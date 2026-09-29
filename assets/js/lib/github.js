@@ -53,11 +53,21 @@ export function rawDirUrl(repo, branch, dir = '') {
   return base.endsWith('/') ? base : `${base}/`;
 }
 
-export function githubUrl(repo, path = '', branch = '') {
+/**
+ * Human-facing URL on github.com.
+ *
+ * `kind` has to be stated because GitHub serves files under `/blob/` and
+ * directories under `/tree/`: a nested file such as `src/main.js` cannot be
+ * told apart from a directory by its shape alone. With no branch the ref is
+ * omitted and GitHub resolves the default branch.
+ */
+export function githubUrl(repo, path = '', branch = '', kind = 'file') {
   const base = `https://github.com/${OWNER}/${repo}`;
+  const tail = encodePath(path);
+  if (!tail) return branch ? `${base}/tree/${encodeURIComponent(branch)}` : base;
+
   const ref = branch ? `/${encodeURIComponent(branch)}` : '';
-  if (!path) return `${base}${ref || '/tree/HEAD'}`;
-  return path.includes('/') ? `${base}/tree${ref}/${path}` : `${base}/blob${ref}/${path}`;
+  return kind === 'dir' ? `${base}/tree${ref}/${tail}` : `${base}/blob${ref}/${tail}`;
 }
 
 /** Branches to probe, most likely first. */

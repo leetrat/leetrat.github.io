@@ -13,7 +13,7 @@ export async function renderFile({ repo, manifest, path, entry }) {
   const meta = el('div', { class: 'file-meta' },
     entry?.size ? el('span', {}, formatBytes(entry.size)) : null,
     el('a', { class: 'link-quiet', href: raw, rel: 'external' }, t('common.raw')),
-    el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch), rel: 'external' }, t('common.github')),
+    el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch, 'file'), rel: 'external' }, t('common.github')),
   );
 
   if (isImage(path)) {

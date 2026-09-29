@@ -1,7 +1,7 @@
 /** Error and empty states, shared by every view. */
 
-import { CONFIG } from '../config.js';
 import { el, frag } from '../lib/dom.js';
+import { githubUrl } from '../lib/github.js';
 import { t, tError, translateValue } from '../lib/i18n.js';
 
 export function renderError(error, { mount, repo } = {}) {
@@ -10,7 +10,7 @@ export function renderError(error, { mount, repo } = {}) {
 
   const actions = frag(
     mount && el('a', { class: 'btn', href: `${mount.prefix}/` }, t('error.back', { label })),
-    repo && el('a', { class: 'btn btn-ghost', href: `https://github.com/${CONFIG.owner}/${repo}` }, t('error.openOnGithub')),
+    repo && el('a', { class: 'btn btn-ghost', href: githubUrl(repo), rel: 'external' }, t('error.openOnGithub')),
     el('a', { class: 'btn btn-ghost', href: '/' }, t('error.home')),
   );
 

@@ -28,7 +28,7 @@ export function renderDirectory({ mount, repo, manifest, dir, entries }) {
     up && el('a', { class: 'crumb-up', href: up }, `↑ ${t('directory.parent')}`),
     el('div', { class: 'entry-summary' },
       t('directory.entry', { count: entries.length }),
-      el('a', { class: 'link-quiet', href: githubUrl(repo, dir, manifest.branch), rel: 'external' }, t('common.viewOnGithub')),
+      el('a', { class: 'link-quiet', href: githubUrl(repo, dir, manifest.branch, 'dir'), rel: 'external' }, t('common.viewOnGithub')),
     ),
     rows.length
       ? el('ul', { class: 'entry-list' }, rows)

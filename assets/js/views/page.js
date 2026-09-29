@@ -117,7 +117,7 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
       el('span', { class: 'preview-path mono' }, path),
       status,
       el('a', { class: 'link-quiet', href: url, rel: 'external' }, t('common.raw')),
-      el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch), rel: 'external' }, t('common.github')),
+      el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch, 'file'), rel: 'external' }, t('common.github')),
       mount && repo
         ? el('a', { class: 'link-quiet', href: `${mount.prefix}/${repo}` }, t('common.repoRoot'))
         : null,
