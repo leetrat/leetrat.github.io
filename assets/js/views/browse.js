@@ -6,13 +6,14 @@
 import { el } from '../lib/dom.js';
 import { getManifest, resolvePath, indexHtmlOf } from '../lib/github.js';
 import { breadcrumbs, mountPath } from '../lib/router.js';
-import { isHtml } from '../lib/format.js';
+import { isHtml, isIsolatable } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { renderDirectory } from './directory.js';
 import { renderPage } from './page.js';
 import { renderFile } from './file.js';
 import { renderEmpty } from './error.js';
 import { renderBranchPicker } from './branch-picker.js';
+import { renderIsolated } from './isolated.js';
 
 function breadcrumbBar({ mount, repo, manifest, path, rerender }) {
   const crumbs = breadcrumbs(repo, path);
@@ -50,6 +51,14 @@ export async function renderBrowse(route, ctx) {
 
   const result = resolveTarget(manifest, path);
   const label = path ? `${repo}/${path}` : repo;
+
+  // The isolated view only claims files it can present as a page. A directory
+  // without an index, a binary file or a missing path keeps the normal view,
+  // which has the breadcrumb and the links needed to recover from there.
+  if (route.isolated && result.kind === 'file' && isIsolatable(result.path)) {
+    return renderIsolated({ mount, repo, manifest, path: result.path, entry: result.entry, hash: route.hash, ctx });
+  }
+
   const shell = el('div', { class: 'lab' },
     el('h1', { class: 'sr-only' }, label),
     breadcrumbBar({ mount, repo, manifest, path, rerender: ctx.rerender }),

@@ -43,6 +43,15 @@ export function isMarkdown(path) {
 }
 
 /**
+ * Files that are worth opening as a page on their own. A markdown file is a
+ * document once it is parsed, and an HTML file is one already, so both have an
+ * isolated view; anything else has nothing to isolate from.
+ */
+export function isIsolatable(path) {
+  return isHtml(path) || isMarkdown(path);
+}
+
+/**
  * Extensions that are never worth showing as text. Everything else is assumed
  * to be text, which is the right guess for extensionless files such as
  * `LICENSE`, `Makefile` or `Dockerfile`.

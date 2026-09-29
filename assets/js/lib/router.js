@@ -83,6 +83,31 @@ export function mountPath(mount, ...segments) {
   return `/${parts.join('/')}`;
 }
 
+/**
+ * Query flag for the isolated, chrome-free view of a file: `/lab/repo/a.html?as=1`
+ * shows the document as a page, on its own, with no site header, breadcrumb or
+ * toolbar. It is a flag rather than a path segment so it can never shadow a real
+ * file, and so the URL stays a plain link anyone can copy.
+ */
+export const ISOLATED_PARAM = 'as';
+const ISOLATED_VALUE = '1';
+
+/** True when a URL asks for the isolated view. */
+export function wantsIsolated(url) {
+  return url?.searchParams?.get(ISOLATED_PARAM) === ISOLATED_VALUE;
+}
+
+/** Add the isolated flag to any site path, keeping the fragment last. */
+export function isolated(href) {
+  const [target, hash = ''] = String(href).split('#');
+  return `${target}?${ISOLATED_PARAM}=${ISOLATED_VALUE}${hash ? `#${hash}` : ''}`;
+}
+
+/** Isolated URL for a repository file. */
+export function isolatedUrl(mount, repo, path) {
+  return isolated(mountPath(mount, repo, path));
+}
+
 /** Breadcrumb trail for a repository path. */
 export function breadcrumbs(repo, path) {
   const crumbs = [{ label: repo, path: '' }];

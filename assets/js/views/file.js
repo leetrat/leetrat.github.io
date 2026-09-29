@@ -3,8 +3,8 @@
 import { el } from '../lib/dom.js';
 import { CONFIG } from '../config.js';
 import { cdnUrl, rawUrl, readFile, githubUrl } from '../lib/github.js';
-import { formatBytes, isImage, isBinary, isMarkdown } from '../lib/format.js';
-import { mountPath } from '../lib/router.js';
+import { formatBytes, isImage, isBinary, isMarkdown, isIsolatable } from '../lib/format.js';
+import { mountPath, isolated, isolatedUrl } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { renderMarkdown, isAbsolute } from '../lib/markdown.js';
 
@@ -29,14 +29,18 @@ function repoPath(dir, reference) {
   return clean.startsWith('/') ? join('', clean) : join(dir, clean);
 }
 
-function resolveMarkdownLink(href, { mount, repo, dir }) {
+function resolveMarkdownLink(href, { mount, repo, dir, asIs }) {
   if (!href || href.startsWith('#')) return { href: href || '#', external: false };
   if (isAbsolute(href)) return { href, external: true };
 
   const [target, hash = ''] = href.split('#');
   if (!target) return { href: `#${hash}`, external: false };
 
-  const path = mountPath(mount, repo, repoPath(dir, target));
+  // Isolated, links stay isolated: a report that links its own sections and
+  // attachments should not bounce the reader back into the site chrome.
+  const base = mountPath(mount, repo, repoPath(dir, target));
+  const path = asIs ? isolated(base) : base;
+
   return { href: hash ? `${path}#${hash}` : path, external: false };
 }
 
@@ -44,22 +48,27 @@ function resolveMarkdownLink(href, { mount, repo, dir }) {
  * Resolvers the markdown renderer needs for one file: links become site routes
  * so navigation stays client side, images are served from the CDN.
  */
-export function markdownResolvers({ mount, repo, manifest, path }) {
+export function markdownResolvers({ mount, repo, manifest, path, isolated: asIs = false }) {
   const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
 
   return {
     dir,
     imageUrl: (src) => (isAbsolute(src) ? src : cdnUrl(manifest.repo, manifest.branch, repoPath(dir, src))),
-    resolveLink: (href) => resolveMarkdownLink(href, { mount, repo, dir }),
+    resolveLink: (href) => resolveMarkdownLink(href, { mount, repo, dir, asIs }),
   };
 }
 
-export async function renderFile({ mount, repo, manifest, path, entry }) {
+export async function renderFile({ mount, repo, manifest, path, entry, isolated: asIs = false }) {
   const cdn = cdnUrl(manifest.repo, manifest.branch, path);
   const raw = rawUrl(manifest.repo, manifest.branch, path);
 
   const meta = el('div', { class: 'file-meta' },
     entry?.size ? el('span', {}, formatBytes(entry.size)) : null,
+    // The link to the isolated view belongs in the normal view: it is how the
+    // view is reached in the first place.
+    !asIs && isIsolatable(path)
+      ? el('a', { class: 'link-quiet', href: isolatedUrl(mount, repo, path), target: '_blank', rel: 'noopener' }, t('common.openAsPage'))
+      : null,
     el('a', { class: 'link-quiet', href: raw, rel: 'external' }, t('common.raw')),
     el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch, 'file'), rel: 'external' }, t('common.github')),
   );
@@ -94,11 +103,13 @@ export async function renderFile({ mount, repo, manifest, path, entry }) {
   }
 
   if (isMarkdown(path)) {
-    return el('section', { class: 'panel panel-markdown' },
-      meta,
-      renderMarkdown(text, markdownResolvers({ mount, repo, manifest, path })),
-    );
+    const document = renderMarkdown(text, markdownResolvers({ mount, repo, manifest, path, isolated: asIs }));
+    // The isolated view is the document alone: no panel, no file metadata.
+    if (asIs) return el('div', { class: 'isolated isolated-markdown' }, document);
+    return el('section', { class: 'panel panel-markdown' }, meta, document);
   }
+
+  if (asIs) return el('div', { class: 'isolated isolated-text' }, el('pre', { class: 'file-text' }, el('code', {}, text)));
 
   return el('section', { class: 'panel' },
     meta,

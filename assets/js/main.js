@@ -8,7 +8,7 @@
  */
 
 import { CONFIG } from './config.js';
-import { resolve, listedMounts } from './lib/router.js';
+import { resolve, listedMounts, wantsIsolated } from './lib/router.js';
 import { createNavigator } from './lib/nav.js';
 import { spinner, clear, el } from './lib/dom.js';
 import { t, translateValue, onLanguageChange } from './lib/i18n.js';
@@ -39,14 +39,17 @@ function describeRouteError(route) {
 
 const outlet = document.getElementById('app');
 
-function documentTitle(route) {
+function documentTitle(route, isolated = Boolean(route.isolated)) {
   switch (route.view) {
     case 'home':
       return `${CONFIG.owner}`;
     case 'repo-browser':
       return `${translateValue(route.mount.label) || route.mount.prefix} · ${CONFIG.owner}`;
     case 'browse':
-      return [route.path, route.repo, CONFIG.owner].filter(Boolean).join(' / ');
+      // The isolated view is a page of its own, so it is titled after the file.
+      return isolated
+        ? `${route.path} · ${route.repo}`
+        : [route.path, route.repo, CONFIG.owner].filter(Boolean).join(' / ');
     default:
       return CONFIG.owner;
   }
@@ -54,6 +57,12 @@ function documentTitle(route) {
 
 function setChrome(route) {
   document.title = documentTitle(route);
+
+  // Optimistic: the isolated view is asked for by the URL, so the header goes
+  // away before the file has loaded. `renderRoute` corrects this once the view
+  // says what it actually rendered, which matters when a view asked for
+  // isolation but had nothing to isolate.
+  document.body.classList.toggle('is-isolated', Boolean(route.isolated));
 
   for (const link of document.querySelectorAll('[data-nav]')) {
     const prefix = link.dataset.nav;
@@ -63,6 +72,40 @@ function setChrome(route) {
     else link.removeAttribute('aria-current');
   }
 }
+
+/**
+ * Only a view that rendered the isolated document hides the site around it, and
+ * it is titled like a page of its own.
+ */
+function applyChrome(node, route) {
+  const isolated = node?.classList?.contains('isolated') === true;
+  document.body.classList.toggle('is-isolated', isolated);
+  document.title = documentTitle(route, isolated);
+}
+
+// Escape leaves the isolated view, which has no visible control of its own. It
+// goes back the way the reader arrived when there was a page to go back to, and
+// otherwise to the same file in the normal view, so it can never strand someone
+// on a blank page or drop them out of the site.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !document.body.classList.contains('is-isolated')) return;
+
+  let from = null;
+  try {
+    from = document.referrer ? new URL(document.referrer) : null;
+  } catch {
+    from = null;
+  }
+
+  if (from && from.origin === location.origin && history.length > 1) {
+    history.back();
+    return;
+  }
+
+  const url = new URL(location.href);
+  url.searchParams.delete('as');
+  location.replace(`${url.pathname}${url.search}${url.hash}`);
+});
 
 /** Render a route. Returns the promise so callers can await a settled view. */
 export async function renderRoute(route) {
@@ -74,10 +117,12 @@ export async function renderRoute(route) {
   try {
     const node = await view(route, { config: CONFIG, navigate, rerender: () => renderRoute(currentRoute()) });
     if (!node) throw new Error(`View "${route.view}" returned nothing`);
+    applyChrome(node, route);
     clear(outlet).append(node);
     if (!route.hash) window.scrollTo(0, 0);
   } catch (error) {
     console.error('[leetrat] failed to render', route, error);
+    applyChrome(null, route);
     clear(outlet).append(renderError(normalizeError(error), { mount: route.mount, repo: route.repo }));
   }
 }
@@ -90,6 +135,7 @@ function normalizeError(error) {
 function currentRoute(url = new URL(location.href)) {
   const route = resolve(url.pathname, CONFIG);
   route.hash = url.hash;
+  route.isolated = wantsIsolated(url);
   return route;
 }
 
@@ -102,7 +148,9 @@ const navigator = createNavigator({
 function navigate(path, hash = '') {
   const url = new URL(path, location.origin);
   url.hash = hash || '';
-  navigator.go(`${url.pathname}${url.hash}`);
+  // The search is kept: the isolated view is a plain URL with `?as=1`, and a
+  // link followed inside a previewed document must not drop it.
+  navigator.go(`${url.pathname}${url.search}${url.hash}`);
 }
 
 /** Build the header nav from the configured mounts. */

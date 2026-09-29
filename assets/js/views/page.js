@@ -5,11 +5,16 @@
  * own relative CSS/JS/images resolve, and rendered inside a sandboxed iframe.
  * Scripts therefore run in an origin-isolated frame and cannot reach this
  * site's DOM, storage or cookies.
+ *
+ * `isolated` drops the panel and the toolbar and lets the frame run the full
+ * height of the window, which is the whole point of the `?as=1` view: the
+ * document, and only the document.
  */
 
 import { el } from '../lib/dom.js';
 import { CONFIG } from '../config.js';
 import { cdnDirUrl, rawDirUrl, readFile, githubUrl } from '../lib/github.js';
+import { isolatedUrl } from '../lib/router.js';
 import { t } from '../lib/i18n.js';
 import { bridgeSource } from './bridge.js';
 
@@ -67,7 +72,7 @@ function buildDocument(html, { baseHref, repoPrefix, rawPrefix, hash }) {
   return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
 }
 
-export async function renderPage({ mount, repo, manifest, path, hash, navigate }) {
+export async function renderPage({ mount, repo, manifest, path, hash, navigate, isolated = false }) {
   const { tooBig, text, url } = await readFile(manifest, path, { maxBytes: CONFIG.limits.textPreviewBytes });
 
   if (tooBig) {
@@ -99,7 +104,13 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
     if (event.source !== frame.contentWindow) return;
 
     if (data.type === 'height') {
-      const height = Math.min(Math.max(Number(data.payload) || 0, CONFIG.preview.minHeight), CONFIG.preview.maxHeight);
+      // In the panel the frame is a scrollable slab of a fixed shape; isolated,
+      // it grows to whatever the document needs and the window does the
+      // scrolling.
+      const measured = Math.max(Number(data.payload) || 0, 1);
+      const height = isolated
+        ? measured
+        : Math.min(Math.max(measured, CONFIG.preview.minHeight), CONFIG.preview.maxHeight);
       frame.style.height = `${height}px`;
     } else if (data.type === 'ready') {
       status.textContent = t('common.ready');
@@ -112,10 +123,15 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
 
   frame.srcdoc = buildDocument(text, { baseHref, repoPrefix, rawPrefix, hash });
 
+  if (isolated) return el('div', { class: 'isolated isolated-frame' }, frame);
+
   return el('section', { class: 'panel panel-preview' },
     el('div', { class: 'preview-toolbar' },
       el('span', { class: 'preview-path mono' }, path),
       status,
+      mount && repo
+        ? el('a', { class: 'link-quiet', href: isolatedUrl(mount, repo, path), target: '_blank', rel: 'noopener' }, t('common.openAsPage'))
+        : null,
       el('a', { class: 'link-quiet', href: url, rel: 'external' }, t('common.raw')),
       el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch, 'file'), rel: 'external' }, t('common.github')),
       mount && repo

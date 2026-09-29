@@ -38,6 +38,7 @@ const STRINGS = {
     'common.repoRoot': 'repo root',
     'common.download': 'Download',
     'common.openRaw': 'Open raw file',
+    'common.openAsPage': 'open as page',
 
     'repoIndex.summary.one': '{count} public repository',
     'repoIndex.summary.other': '{count} public repositories',
@@ -115,6 +116,7 @@ const STRINGS = {
     'common.repoRoot': 'корень репозитория',
     'common.download': 'Скачать',
     'common.openRaw': 'Открыть исходный файл',
+    'common.openAsPage': 'открыть как страницу',
 
     'repoIndex.summary.one': '{count} публичный репозиторий',
     'repoIndex.summary.few': '{count} публичных репозитория',
