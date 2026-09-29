@@ -72,7 +72,7 @@ export async function renderRoute(route) {
   clear(outlet).append(spinner(t('common.loading')));
 
   try {
-    const node = await view(route, { config: CONFIG, navigate });
+    const node = await view(route, { config: CONFIG, navigate, rerender: () => renderRoute(currentRoute()) });
     if (!node) throw new Error(`View "${route.view}" returned nothing`);
     clear(outlet).append(node);
     if (!route.hash) window.scrollTo(0, 0);

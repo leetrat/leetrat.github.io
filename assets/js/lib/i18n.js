@@ -54,6 +54,16 @@ const STRINGS = {
     'directory.empty': 'This directory is empty.',
     'directory.breadcrumb': 'Breadcrumb',
 
+    'branch.hint': 'Switch branch',
+    'branch.list': 'Branches',
+    'branch.loading': 'Loading branches…',
+    'branch.cached': 'Branch list from cache.',
+    'branch.truncated': 'Showing the first page of branches only.',
+    'branch.switching': 'Switching to {branch}…',
+    'branch.missing': '{branch} could not be loaded',
+    'branch.failed': 'Could not load the branch list',
+    'branch.rateLimit': 'GitHub rate limit reached — try again later',
+
     'browse.notFound.title': 'Path not found',
     'browse.notFound.hint': '{path} does not exist on this branch.',
 
@@ -122,6 +132,16 @@ const STRINGS = {
     'directory.kind.directory': 'каталог',
     'directory.empty': 'Этот каталог пуст.',
     'directory.breadcrumb': 'Навигационная цепочка',
+
+    'branch.hint': 'Сменить ветку',
+    'branch.list': 'Ветки',
+    'branch.loading': 'Загрузка веток…',
+    'branch.cached': 'Список веток из кэша.',
+    'branch.truncated': 'Показана только первая страница списка веток.',
+    'branch.switching': 'Переключение на {branch}…',
+    'branch.missing': 'Не удалось загрузить {branch}',
+    'branch.failed': 'Не удалось получить список веток',
+    'branch.rateLimit': 'Исчерпан лимит запросов к GitHub — попробуйте позже',
 
     'browse.notFound.title': 'Путь не найден',
     'browse.notFound.hint': '{path} не существует в этой ветке.',

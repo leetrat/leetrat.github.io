@@ -93,6 +93,8 @@ export const CONFIG = {
   cache: {
     manifestTtlMs: 15 * 60_000,
     reposTtlMs: 10 * 60_000,
+    /** Branch lists change rarely and the API budget is 60 requests an hour. */
+    branchesTtlMs: 60 * 60_000,
     branchTtlMs: 30 * 24 * 60 * 60_000,
   },
 

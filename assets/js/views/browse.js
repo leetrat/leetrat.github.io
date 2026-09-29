@@ -12,8 +12,9 @@ import { renderDirectory } from './directory.js';
 import { renderPage } from './page.js';
 import { renderFile } from './file.js';
 import { renderEmpty } from './error.js';
+import { renderBranchPicker } from './branch-picker.js';
 
-function breadcrumbBar({ mount, repo, manifest, path }) {
+function breadcrumbBar({ mount, repo, manifest, path, rerender }) {
   const crumbs = breadcrumbs(repo, path);
 
   return el('nav', { class: 'crumbs', 'aria-label': t('directory.breadcrumb') },
@@ -24,7 +25,7 @@ function breadcrumbBar({ mount, repo, manifest, path }) {
         ? el('span', { class: 'crumb-current' }, crumb.label)
         : el('a', { class: 'crumb', href: mountPath(mount, repo, crumb.path) }, crumb.label),
     ]),
-    manifest.branch && el('span', { class: 'tag tag-right' }, manifest.branch),
+    manifest.branch && renderBranchPicker({ repo, manifest, rerender }),
   );
 }
 
@@ -51,7 +52,7 @@ export async function renderBrowse(route, ctx) {
   const label = path ? `${repo}/${path}` : repo;
   const shell = el('div', { class: 'lab' },
     el('h1', { class: 'sr-only' }, label),
-    breadcrumbBar({ mount, repo, manifest, path }),
+    breadcrumbBar({ mount, repo, manifest, path, rerender: ctx.rerender }),
   );
 
   if (result.kind === 'missing') {
@@ -79,7 +80,7 @@ export async function renderBrowse(route, ctx) {
       navigate: followRepoPath,
     });
     // The breadcrumb points at the directory, the toolbar at the file.
-    shell.querySelector('.crumbs')?.replaceWith(breadcrumbBar({ mount, repo, manifest, path: result.path }));
+    shell.querySelector('.crumbs')?.replaceWith(breadcrumbBar({ mount, repo, manifest, path: result.path, rerender: ctx.rerender }));
     shell.append(page);
     return shell;
   }
