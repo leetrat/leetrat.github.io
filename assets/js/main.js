@@ -10,11 +10,13 @@
 import { CONFIG } from './config.js';
 import { resolve, listedMounts } from './lib/router.js';
 import { createNavigator } from './lib/nav.js';
-import { spinner, clear } from './lib/dom.js';
+import { spinner, clear, el } from './lib/dom.js';
+import { t, translateValue, onLanguageChange } from './lib/i18n.js';
 import { renderHome } from './views/home.js';
 import { renderRepoIndex } from './views/repo-index.js';
 import { renderBrowse } from './views/browse.js';
 import { renderError } from './views/error.js';
+import { renderLanguageSwitcher } from './views/language-switcher.js';
 
 /** Route view name -> renderer. Replace an entry to swap an implementation. */
 export const VIEWS = {
@@ -27,12 +29,12 @@ export const VIEWS = {
 /** An error route is a routing problem, not a failed request: describe it. */
 function describeRouteError(route) {
   if (route.reason === 'filtered') {
-    return { kind: 'filtered', message: `${route.repo} is not served from ${route.mount.prefix}.` };
+    return { kind: 'filtered', message: t('error.route.filtered', { repo: route.repo, prefix: route.mount.prefix }) };
   }
   if (route.reason === 'no-mount') {
-    return { kind: 'no-mount', message: `No page is served at ${route.path}` };
+    return { kind: 'no-mount', message: t('error.route.noMount', { path: route.path }) };
   }
-  return { kind: 'server', message: 'This page could not be rendered.' };
+  return { kind: 'server', message: t('error.route.generic') };
 }
 
 const outlet = document.getElementById('app');
@@ -42,7 +44,7 @@ function documentTitle(route) {
     case 'home':
       return `${CONFIG.owner}`;
     case 'repo-browser':
-      return `${route.mount.label || 'Repositories'} · ${CONFIG.owner}`;
+      return `${translateValue(route.mount.label) || route.mount.prefix} · ${CONFIG.owner}`;
     case 'browse':
       return [route.path, route.repo, CONFIG.owner].filter(Boolean).join(' / ');
     default:
@@ -67,7 +69,7 @@ export async function renderRoute(route) {
   const view = VIEWS[route.view] || VIEWS.error;
 
   setChrome(route);
-  clear(outlet).append(spinner());
+  clear(outlet).append(spinner(t('common.loading')));
 
   try {
     const node = await view(route, { config: CONFIG, navigate });
@@ -108,21 +110,33 @@ function buildNav() {
   const nav = document.querySelector('.site-nav');
   if (!nav) return;
 
-  const items = [{ label: 'Home', prefix: '/' }, ...listedMounts(CONFIG).map((mount) => ({
-    label: mount.label || mount.prefix,
+  const items = [{ label: t('nav.home'), prefix: '/' }, ...listedMounts(CONFIG).map((mount) => ({
+    label: translateValue(mount.label) || mount.prefix,
     prefix: `${mount.prefix}/`,
   }))];
 
   clear(nav);
   for (const item of items) {
-    nav.append(Object.assign(document.createElement('a'), {
-      className: 'nav-link',
-      href: item.prefix,
-      textContent: item.label,
-    }));
-    nav.lastElementChild.dataset.nav = item.prefix;
+    nav.append(el('a', { class: 'nav-link', href: item.prefix, dataset: { nav: item.prefix } }, item.label));
   }
 }
 
-buildNav();
+/** Header chrome: nav labels and the language picker both depend on the language. */
+function buildChrome() {
+  buildNav();
+
+  const header = document.querySelector('.site-header');
+  if (!header) return;
+  header.querySelector('.lang-switch')?.remove();
+  header.append(renderLanguageSwitcher());
+}
+
+// Switching language rebuilds the chrome and re-renders the current route, so
+// every string on screen is refreshed at once.
+onLanguageChange(() => {
+  buildChrome();
+  renderRoute(currentRoute());
+});
+
+buildChrome();
 renderRoute(currentRoute());

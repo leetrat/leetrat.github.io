@@ -1,5 +1,7 @@
 /** Formatting helpers shared by the views. */
 
+import { getLanguage } from './i18n.js';
+
 export function formatBytes(bytes) {
   if (bytes === null || bytes === undefined) return '';
   if (bytes < 1024) return `${bytes} B`;
@@ -18,7 +20,7 @@ export function formatDate(value) {
   // jsDelivr reports a fixed epoch for git trees; only format real dates.
   const date = new Date(value);
   if (Number.isNaN(date.getTime()) || date.getUTCFullYear() < 1990) return '';
-  return date.toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat(getLanguage(), { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
 }
 
 export function extension(path) {
@@ -48,10 +50,6 @@ export function isBinary(path) {
     'zip', 'gz', 'tgz', 'bz2', 'xz', '7z', 'rar', 'jar', 'war', 'whl', 'exe', 'dll', 'so', 'dylib', 'class', 'o', 'a',
     'woff', 'woff2', 'ttf', 'otf', 'eot', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'sqlite', 'db', 'pdb', 'bin',
   ].includes(extension(path));
-}
-
-export function pluralize(count, one, many = `${one}s`) {
-  return `${count} ${count === 1 ? one : many}`;
 }
 
 /** Byte order used for directory listings. */

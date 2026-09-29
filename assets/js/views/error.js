@@ -1,41 +1,23 @@
 /** Error and empty states, shared by every view. */
 
+import { CONFIG } from '../config.js';
 import { el, frag } from '../lib/dom.js';
-
-const TITLES = {
-  'not-found': 'Not found',
-  'no-mount': 'Page not found',
-  filtered: 'Not in this index',
-  'rate-limit': 'Rate limited',
-  network: 'Offline',
-  forbidden: 'Not accessible',
-  server: 'Upstream error',
-};
-
-const HINTS = {
-  'not-found': 'The repository is not public, is empty, or has no content at this path.',
-  'no-mount': 'This path is not served by the site.',
-  filtered: 'This mount only serves repositories whose name matches its filter.',
-  'rate-limit': 'GitHub allows 60 unauthenticated requests per hour per IP address. Try again shortly.',
-  network: 'The request could not reach the network.',
-  forbidden: 'GitHub refused to serve this repository. Private repositories are never mirrored.',
-  server: 'The upstream service returned an error.',
-};
+import { t, tError, translateValue } from '../lib/i18n.js';
 
 export function renderError(error, { mount, repo } = {}) {
   const kind = error?.kind || 'server';
-  const title = TITLES[kind] || 'Something went wrong';
+  const label = translateValue(mount?.label) || mount?.prefix;
 
   const actions = frag(
-    mount && el('a', { class: 'btn', href: `${mount.prefix}/` }, `Back to ${mount.label || 'index'}`),
-    repo && el('a', { class: 'btn btn-ghost', href: `https://github.com/leetrat/${repo}` }, 'Open on GitHub'),
-    el('a', { class: 'btn btn-ghost', href: '/' }, 'Home'),
+    mount && el('a', { class: 'btn', href: `${mount.prefix}/` }, t('error.back', { label })),
+    repo && el('a', { class: 'btn btn-ghost', href: `https://github.com/${CONFIG.owner}/${repo}` }, t('error.openOnGithub')),
+    el('a', { class: 'btn btn-ghost', href: '/' }, t('error.home')),
   );
 
   return el('section', { class: 'panel panel-error' },
-    el('h1', { class: 'panel-title' }, title),
+    el('h1', { class: 'panel-title' }, tError(kind, 'title')),
     el('p', { class: 'panel-message' }, error?.message || String(error)),
-    el('p', { class: 'panel-hint' }, HINTS[kind] || ''),
+    el('p', { class: 'panel-hint' }, tError(kind, 'hint')),
     error?.url && el('p', { class: 'panel-hint mono' }, error.url),
     el('div', { class: 'btn-row' }, actions),
   );

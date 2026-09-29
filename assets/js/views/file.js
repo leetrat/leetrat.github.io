@@ -4,6 +4,7 @@ import { el } from '../lib/dom.js';
 import { CONFIG } from '../config.js';
 import { cdnUrl, rawUrl, readFile, githubUrl } from '../lib/github.js';
 import { formatBytes, isImage, isBinary } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 
 export async function renderFile({ repo, manifest, path, entry }) {
   const cdn = cdnUrl(manifest.repo, manifest.branch, path);
@@ -11,8 +12,8 @@ export async function renderFile({ repo, manifest, path, entry }) {
 
   const meta = el('div', { class: 'file-meta' },
     entry?.size ? el('span', {}, formatBytes(entry.size)) : null,
-    el('a', { class: 'link-quiet', href: raw, rel: 'external' }, 'raw'),
-    el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch), rel: 'external' }, 'github'),
+    el('a', { class: 'link-quiet', href: raw, rel: 'external' }, t('common.raw')),
+    el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch), rel: 'external' }, t('common.github')),
   );
 
   if (isImage(path)) {
@@ -24,10 +25,12 @@ export async function renderFile({ repo, manifest, path, entry }) {
 
   if (isBinary(path)) {
     return el('section', { class: 'panel' },
-      el('h1', { class: 'panel-title' }, 'Binary file'),
-      el('p', { class: 'panel-hint' }, 'This file cannot be displayed in the browser.'),
+      el('h1', { class: 'panel-title' }, t('file.binary.title')),
+      el('p', { class: 'panel-hint' }, t('file.binary.hint')),
       meta,
-      el('div', { class: 'btn-row' }, el('a', { class: 'btn', href: raw, rel: 'external', download: '' }, 'Download')),
+      el('div', { class: 'btn-row' },
+        el('a', { class: 'btn', href: raw, rel: 'external', download: '' }, t('common.download')),
+      ),
     );
   }
 
@@ -35,10 +38,10 @@ export async function renderFile({ repo, manifest, path, entry }) {
 
   if (tooBig) {
     return el('section', { class: 'panel' },
-      el('h1', { class: 'panel-title' }, 'File too large to display'),
-      el('p', { class: 'panel-hint' }, `${formatBytes(entry?.size || 0)} — open it directly instead.`),
+      el('h1', { class: 'panel-title' }, t('file.tooLarge.title')),
+      el('p', { class: 'panel-hint' }, t('file.tooLarge.hint', { size: formatBytes(entry?.size || 0) })),
       meta,
-      el('a', { class: 'btn', href: url, rel: 'external' }, 'Open raw file'),
+      el('a', { class: 'btn', href: url, rel: 'external' }, t('common.openRaw')),
     );
   }
 

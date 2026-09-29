@@ -9,6 +9,16 @@ export const CONFIG = {
   /** GitHub account whose public repositories are published here. */
   owner: 'leetrat',
 
+  i18n: {
+    /**
+     * UI language: `null` follows the browser when it is one of the translated
+     * languages, and falls back to `fallback` otherwise. Codes must exist in
+     * `assets/js/lib/i18n.js`; the header switcher overrides this per browser.
+     */
+    default: 'ru',
+    fallback: 'en',
+  },
+
   /**
    * Mount points claimed by the repo browser.
    *
@@ -24,9 +34,14 @@ export const CONFIG = {
    *               else fall through to the "not found" view.
    *   unlisted    serve the mount but keep it out of the header nav and the
    *               home page, so it is reachable only by URL.
+   *
+   * Any user-facing string may be translated by giving it one value per
+   * language instead of a single string:
+   *
+   *   label: { en: 'Label', ru: 'Название' }
    */
   mounts: [
-    { prefix: '/lab', view: 'repo-browser', label: 'itmo', repoPrefix: 'itmo-', unlisted: true },
+    { prefix: '/lab', view: 'repo-browser', label: {en: 'Labs', ru: 'Лабораторные'}, repoPrefix: 'itmo-', unlisted: true },
     // { prefix: '/drafts', view: 'repo-browser', label: 'Drafts', unlisted: true },
   ],
 

@@ -21,6 +21,21 @@ export function el(tag, attrs, ...children) {
   return node;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Create a namespaced SVG element. Attributes are set verbatim. */
+export function svg(tag, attrs, ...children) {
+  const node = document.createElementNS(SVG_NS, tag);
+
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value === null || value === undefined || value === false) continue;
+    node.setAttribute(key, value);
+  }
+
+  append(node, children);
+  return node;
+}
+
 export function append(node, children) {
   for (const child of children.flat(Infinity)) {
     if (child === null || child === undefined || child === false) continue;

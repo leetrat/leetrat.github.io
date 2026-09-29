@@ -7,6 +7,7 @@ import { el } from '../lib/dom.js';
 import { getManifest, resolvePath, indexHtmlOf } from '../lib/github.js';
 import { breadcrumbs, mountPath } from '../lib/router.js';
 import { isHtml } from '../lib/format.js';
+import { t } from '../lib/i18n.js';
 import { renderDirectory } from './directory.js';
 import { renderPage } from './page.js';
 import { renderFile } from './file.js';
@@ -15,7 +16,7 @@ import { renderEmpty } from './error.js';
 function breadcrumbBar({ mount, repo, manifest, path }) {
   const crumbs = breadcrumbs(repo, path);
 
-  return el('nav', { class: 'crumbs', 'aria-label': 'Breadcrumb' },
+  return el('nav', { class: 'crumbs', 'aria-label': t('directory.breadcrumb') },
     el('a', { class: 'crumb', href: mountPath(mount, repo) }, repo),
     crumbs.slice(1).map((crumb, index) => [
       el('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '/'),
@@ -54,7 +55,7 @@ export async function renderBrowse(route, ctx) {
   );
 
   if (result.kind === 'missing') {
-    shell.append(renderEmpty('Path not found', `${repo}/${path} does not exist on this branch.`));
+    shell.append(renderEmpty(t('browse.notFound.title'), t('browse.notFound.hint', { path: `${repo}/${path}` })));
     return shell;
   }
 

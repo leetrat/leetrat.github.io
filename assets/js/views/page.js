@@ -10,6 +10,7 @@
 import { el } from '../lib/dom.js';
 import { CONFIG } from '../config.js';
 import { cdnDirUrl, rawDirUrl, readFile, githubUrl } from '../lib/github.js';
+import { t } from '../lib/i18n.js';
 import { bridgeSource } from './bridge.js';
 
 const ROOT_RELATIVE_ATTRS = [
@@ -71,9 +72,9 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
 
   if (tooBig) {
     return el('section', { class: 'panel' },
-      el('h1', { class: 'panel-title' }, 'File too large to preview'),
-      el('p', { class: 'panel-hint' }, 'Open it directly instead.'),
-      el('a', { class: 'btn', href: url, rel: 'external' }, 'Open raw file'),
+      el('h1', { class: 'panel-title' }, t('page.tooLarge.title')),
+      el('p', { class: 'panel-hint' }, t('page.tooLarge.hint')),
+      el('a', { class: 'btn', href: url, rel: 'external' }, t('common.openRaw')),
     );
   }
 
@@ -90,7 +91,7 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
     loading: 'eager',
   });
 
-  const status = el('span', { class: 'preview-status' }, 'loading…');
+  const status = el('span', { class: 'preview-status' }, t('common.loading'));
 
   window.addEventListener('message', (event) => {
     const data = event.data;
@@ -101,7 +102,7 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
       const height = Math.min(Math.max(Number(data.payload) || 0, CONFIG.preview.minHeight), CONFIG.preview.maxHeight);
       frame.style.height = `${height}px`;
     } else if (data.type === 'ready') {
-      status.textContent = 'ready';
+      status.textContent = t('common.ready');
     } else if (data.type === 'navigate') {
       navigate(data.payload.path, data.payload.hash);
     } else if (data.type === 'external') {
@@ -115,10 +116,10 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate }
     el('div', { class: 'preview-toolbar' },
       el('span', { class: 'preview-path mono' }, path),
       status,
-      el('a', { class: 'link-quiet', href: url, rel: 'external' }, 'raw'),
-      el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch), rel: 'external' }, 'github'),
+      el('a', { class: 'link-quiet', href: url, rel: 'external' }, t('common.raw')),
+      el('a', { class: 'link-quiet', href: githubUrl(repo, path, manifest.branch), rel: 'external' }, t('common.github')),
       mount && repo
-        ? el('a', { class: 'link-quiet', href: `${mount.prefix}/${repo}` }, 'repo root')
+        ? el('a', { class: 'link-quiet', href: `${mount.prefix}/${repo}` }, t('common.repoRoot'))
         : null,
     ),
     frame,
