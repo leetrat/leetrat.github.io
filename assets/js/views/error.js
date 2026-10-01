@@ -4,13 +4,13 @@ import { el, frag } from '../lib/dom.js';
 import { githubUrl } from '../lib/github.js';
 import { t, tError, translateValue } from '../lib/i18n.js';
 
-export function renderError(error, { mount, repo } = {}) {
+export function renderError(error, { section, repo } = {}) {
   const kind = error?.kind || 'server';
-  const label = translateValue(mount?.label) || mount?.prefix;
+  const label = translateValue(section?.label) || section?.href;
 
   const actions = frag(
-    mount && el('a', { class: 'btn', href: `${mount.prefix}/` }, t('error.back', { label })),
-    repo && el('a', { class: 'btn btn-ghost', href: githubUrl(repo), rel: 'external' }, t('error.openOnGithub')),
+    label && el('a', { class: 'btn', href: section.href }, t('error.back', { label })),
+    repo && el('a', { class: 'btn btn-ghost', href: githubUrl(repo, '', null, 'repo'), rel: 'external' }, t('error.openOnGithub')),
     el('a', { class: 'btn btn-ghost', href: '/' }, t('error.home')),
   );
 

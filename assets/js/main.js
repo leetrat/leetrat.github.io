@@ -1,75 +1,78 @@
 /**
  * Application entry point.
  *
- * Responsibilities are deliberately small: resolve the URL to a route, look
- * the route's view up in the registry, hand it a context, and render whatever
- * it returns into the outlet. Adding a new kind of page means adding one entry
- * to `VIEWS` plus a prefix in `CONFIG.mounts`.
+ * Responsibilities are deliberately small: resolve the URL to a route, look the
+ * route's view up in the registry, hand it a context, and render whatever it
+ * returns into the outlet. Adding a new kind of page means adding one entry to
+ * `VIEWS` and naming it from a section or a mount in `config.js`.
  */
 
-import { CONFIG } from './config.js';
-import { resolve, listedMounts, wantsIsolated, ISOLATED_PARAM } from './lib/router.js';
+import { CONFIG, validateConfig } from './config.js';
+import { resolve, wantedBranch } from './lib/router.js';
 import { createNavigator } from './lib/nav.js';
 import { spinner, clear, el } from './lib/dom.js';
 import { t, translateValue, onLanguageChange } from './lib/i18n.js';
 import { renderHome } from './views/home.js';
-import { renderRepoIndex } from './views/repo-index.js';
-import { renderBrowse } from './views/browse.js';
+import { renderSites } from './views/sites.js';
+import { renderSite } from './views/site.js';
 import { renderError } from './views/error.js';
 import { renderLanguageSwitcher } from './views/language-switcher.js';
 
 /** Route view name -> renderer. Replace an entry to swap an implementation. */
 export const VIEWS = {
   home: renderHome,
-  'repo-browser': renderRepoIndex,
-  browse: renderBrowse,
-  error: (route) => renderError(describeRouteError(route), { mount: route.mount, repo: route.repo }),
+  sites: renderSites,
+  site: renderSite,
+  retired: redirect,
+  error: (route) => renderError(describeRouteError(route), { section: route.section, repo: route.repo }),
 };
+
+/** A retired prefix: send the visitor onward and render nothing. */
+function redirect(route) {
+  location.replace(route.redirect);
+  return el('span', { class: 'sr-only' });
+}
 
 /** An error route is a routing problem, not a failed request: describe it. */
 function describeRouteError(route) {
-  if (route.reason === 'filtered') {
-    return { kind: 'filtered', message: t('error.route.filtered', { repo: route.repo, prefix: route.mount.prefix }) };
+  switch (route.reason) {
+    case 'no-mount':
+      return { kind: 'no-mount', message: t('error.route.noMount', { path: route.path }) };
+    case 'escapes':
+      return { kind: 'escapes', message: t('error.route.escapes') };
+    default:
+      return { kind: 'server', message: t('error.route.generic') };
   }
-  if (route.reason === 'no-mount') {
-    return { kind: 'no-mount', message: t('error.route.noMount', { path: route.path }) };
-  }
-  return { kind: 'server', message: t('error.route.generic') };
 }
 
 const outlet = document.getElementById('app');
 
 /**
- * Set when a view has written a document over the page instead of rendering
- * into the outlet. The site is inert from that point: the router is detached
- * and the outlet this module holds no longer belongs to the document.
+ * Hand the window to a document.
+ *
+ * Called by a view before it writes one over the page, so the router stops
+ * swallowing the clicks and the history that now belong to the document. After
+ * this the site is inert: nothing re-renders, and the outlet this module holds is
+ * no longer part of the document.
  */
 let served = false;
 
-/**
- * Hand the window to a document. Called by a view before it writes, so the
- * router stops swallowing the clicks and the history that now belong to the
- * document. After this the site is inert: nothing re-renders, and the outlet
- * this module holds is not part of the document any more.
- */
 function stop() {
   served = true;
   navigator.stop();
-  document.removeEventListener('keydown', onEscape);
   unsubscribeLanguage();
 }
 
-function documentTitle(route, isolated = Boolean(route.isolated)) {
+function documentTitle(route) {
   switch (route.view) {
     case 'home':
-      return `${CONFIG.owner}`;
-    case 'repo-browser':
-      return `${translateValue(route.mount.label) || route.mount.prefix} · ${CONFIG.owner}`;
-    case 'browse':
-      // The isolated view is a page of its own, so it is titled after the file.
-      return isolated
-        ? `${route.path} · ${route.repo}`
-        : [route.path, route.repo, CONFIG.owner].filter(Boolean).join(' / ');
+      return CONFIG.owner;
+    case 'sites':
+      return `${translateValue(route.section?.label) || t('sites.title')} · ${CONFIG.owner}`;
+    case 'site':
+      // A served document sets its own title from its own markup; this only
+      // applies to a markdown file, which is rendered into this page.
+      return `${route.path || route.repo} · ${route.repo}`;
     default:
       return CONFIG.owner;
   }
@@ -78,59 +81,13 @@ function documentTitle(route, isolated = Boolean(route.isolated)) {
 function setChrome(route) {
   document.title = documentTitle(route);
 
-  // Optimistic: the isolated view is asked for by the URL, so the header goes
-  // away before the file has loaded. `renderRoute` corrects this once the view
-  // says what it actually rendered, which matters when a view asked for
-  // isolation but had nothing to isolate.
-  document.body.classList.toggle('is-isolated', Boolean(route.isolated));
-
   for (const link of document.querySelectorAll('[data-nav]')) {
-    const prefix = link.dataset.nav;
-    const active = prefix === '/' ? route.view === 'home' : Boolean(route.mount && route.mount.prefix === prefix);
+    const active = link.dataset.section === String(CONFIG.sections.indexOf(route.section));
     link.classList.toggle('is-active', active);
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
 }
-
-/**
- * Only a view that rendered the isolated document hides the site around it, and
- * it is titled like a page of its own.
- */
-function applyChrome(node, route) {
-  const isolated = node?.classList?.contains('isolated') === true;
-  document.body.classList.toggle('is-isolated', isolated);
-  document.title = documentTitle(route, isolated);
-}
-
-// Escape leaves the isolated view, which has no visible control of its own. It
-// goes back the way the reader arrived when there was a page to go back to, and
-// otherwise to the same file in the normal view, so it can never strand someone
-// on a blank page or drop them out of the site.
-//
-// A served document has its own Escape behaviour, if any, so this is removed
-// before that document is written.
-function onEscape(event) {
-  if (event.key !== 'Escape' || !document.body.classList.contains('is-isolated')) return;
-
-  let from = null;
-  try {
-    from = document.referrer ? new URL(document.referrer) : null;
-  } catch {
-    from = null;
-  }
-
-  if (from && from.origin === location.origin && history.length > 1) {
-    history.back();
-    return;
-  }
-
-  const url = new URL(location.href);
-  url.searchParams.delete(ISOLATED_PARAM);
-  location.replace(`${url.pathname}${url.search}${url.hash}`);
-}
-
-document.addEventListener('keydown', onEscape);
 
 /** Render a route. Returns the promise so callers can await a settled view. */
 export async function renderRoute(route) {
@@ -147,17 +104,14 @@ export async function renderRoute(route) {
       stop,
     });
     // A view can take the document over rather than render into it. The outlet
-    // is gone by then, so there is nothing to restore chrome onto and nothing
-    // left to append to.
+    // is gone by then, so there is nothing left to append to.
     if (served) return;
     if (!node) throw new Error(`View "${route.view}" returned nothing`);
-    applyChrome(node, route);
     clear(outlet).append(node);
-    if (!route.hash) window.scrollTo(0, 0);
   } catch (error) {
     console.error('[leetrat] failed to render', route, error);
-    applyChrome(null, route);
-    clear(outlet).append(renderError(normalizeError(error), { mount: route.mount, repo: route.repo }));
+    if (served) return;
+    clear(outlet).append(renderError(normalizeError(error), { section: route.section, repo: route.repo }));
   }
 }
 
@@ -169,7 +123,7 @@ function normalizeError(error) {
 function currentRoute(url = new URL(location.href)) {
   const route = resolve(url.pathname, CONFIG);
   route.hash = url.hash;
-  route.isolated = wantsIsolated(url);
+  route.branch = wantedBranch(url);
   return route;
 }
 
@@ -179,27 +133,37 @@ const navigator = createNavigator({
   },
 });
 
-function navigate(path, hash = '') {
+/**
+ * Navigate client side.
+ *
+ * The branch flag is carried over: a markdown document read from a side branch
+ * links onward to routes that have to stay on that branch.
+ */
+function navigate(path, hash = '', branch = null) {
   const url = new URL(path, location.origin);
+  if (branch) url.searchParams.set('branch', branch);
   url.hash = hash || '';
-  // The search is kept: the isolated view is a plain URL with `?as=1`, and a
-  // link followed inside a previewed document must not drop it.
   navigator.go(`${url.pathname}${url.search}${url.hash}`);
 }
 
-/** Build the header nav from the configured mounts. */
+/** Build the header nav from the configured sections, and nothing else. */
 function buildNav() {
   const nav = document.querySelector('.site-nav');
   if (!nav) return;
 
-  const items = [{ label: t('nav.home'), prefix: '/' }, ...listedMounts(CONFIG).map((mount) => ({
-    label: translateValue(mount.label) || mount.prefix,
-    prefix: `${mount.prefix}/`,
-  }))];
+  const items = CONFIG.sections.map((section, index) => ({
+    label: translateValue(section.label) || section.href,
+    index,
+    href: section.href,
+  }));
 
   clear(nav);
   for (const item of items) {
-    nav.append(el('a', { class: 'nav-link', href: item.prefix, dataset: { nav: item.prefix } }, item.label));
+    nav.append(el('a', {
+      class: 'nav-link',
+      href: item.href,
+      dataset: { nav: item.href, section: item.index },
+    }, item.label));
   }
 }
 
@@ -220,5 +184,6 @@ const unsubscribeLanguage = onLanguageChange(() => {
   renderRoute(currentRoute());
 });
 
+validateConfig(CONFIG);
 buildChrome();
 renderRoute(currentRoute());

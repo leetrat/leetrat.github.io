@@ -7,8 +7,11 @@
  * and one table in `STRINGS`; nothing else in the codebase names a language.
  *
  * Plural forms use `Intl.PluralRules`, so keys may be suffixed with the CLDR
- * category (`entries.one`, `entries.few`, `entries.many`, `entries.other`) and
- * looked up with `t('entries', { count })`.
+ * category (`sites.summary.one`, `sites.summary.few`, `sites.summary.other`)
+ * and looked up with `t('sites.summary', { count })`.
+ *
+ * Section labels are not here: they live in `config.js` and go through
+ * `translateValue`, so a section can be added without touching this file.
  */
 
 import { CONFIG } from '../config.js';
@@ -25,158 +28,105 @@ const STRINGS = {
   en: {
     'lang.label': 'Language',
 
-    'nav.home': 'Home',
-
     'home.tagline':
       'Personal site. Projects, coursework and experiments, served straight from public GitHub repositories.',
 
     'common.loading': 'Loading…',
-    'common.ready': 'ready',
-    'common.viewOnGithub': 'view on GitHub',
-    'common.raw': 'raw',
-    'common.github': 'github',
-    'common.repoRoot': 'repo root',
-    'common.download': 'Download',
     'common.openRaw': 'Open raw file',
-    'common.openAsPage': 'open as page',
 
-    'repoIndex.summary.one': '{count} public repository',
-    'repoIndex.summary.other': '{count} public repositories',
-    'repoIndex.hint': 'Pick a repository to browse its files or run it.',
-    'repoIndex.filter': 'Only repositories whose name starts with “{prefix}”.',
-    'repoIndex.updated': 'updated {date}',
-    'repoIndex.empty.title': 'No repositories here',
-    'repoIndex.empty.hint': 'Nothing public to show for {owner} in this mount yet.',
+    'sites.title': 'Sites',
+    'sites.hint': 'Every project below is a repository, served as the website it already is.',
+    'sites.summary.one': '{count} site',
+    'sites.summary.few': '{count} sites',
+    'sites.summary.many': '{count} sites',
+    'sites.summary.other': '{count} sites',
+    'sites.checking': 'Checking repositories…',
+    'sites.empty.title': 'No sites yet',
+    'sites.empty.hint': 'Nothing in the list answers at the moment. Try again later.',
 
-    'directory.parent': 'parent directory',
-    'directory.entry.one': '{count} entry',
-    'directory.entry.other': '{count} entries',
-    'directory.kind.directory': 'directory',
-    'directory.empty': 'This directory is empty.',
-    'directory.breadcrumb': 'Breadcrumb',
-
-    'branch.hint': 'Switch branch',
-    'branch.list': 'Branches',
-    'branch.loading': 'Loading branches…',
-    'branch.cached': 'Branch list from cache.',
-    'branch.truncated': 'Showing the first page of branches only.',
-    'branch.switching': 'Switching to {branch}…',
-    'branch.missing': '{branch} could not be loaded',
-    'branch.failed': 'Could not load the branch list',
-    'branch.rateLimit': 'GitHub rate limit reached — try again later',
-
-    'browse.notFound.title': 'Path not found',
-    'browse.notFound.hint': '{path} does not exist on this branch.',
-
-    'file.tooLarge.title': 'File too large to display',
-    'file.tooLarge.hint': '{size} — open it directly instead.',
-    'file.binary.title': 'Binary file',
-    'file.binary.hint': 'This file cannot be displayed in the browser.',
-
-    'page.tooLarge.title': 'File too large to preview',
-    'page.tooLarge.hint': 'Open it directly instead.',
+    'site.missing.title': 'No site here',
+    'site.missing.hint': 'This repository is not one of the sites, or its entry file is missing.',
+    'site.notFound.title': 'Not found',
+    'site.notFound.hint': '{path} does not exist on {branch}.',
+    'site.unrenderable.title': 'Nothing to show',
+    'site.unrenderable.hint': 'A site is an HTML or markdown file. This is neither, so it is not served.',
+    'site.tooLarge.title': 'File too large to show',
+    'site.tooLarge.hint': '{size} is more than this site renders.',
 
     'error.notFound.title': 'Not found',
     'error.notFound.hint': 'The repository is not public, is empty, or has no content at this path.',
     'error.noMount.title': 'Page not found',
     'error.noMount.hint': 'This path is not served by the site.',
-    'error.filtered.title': 'Not in this index',
-    'error.filtered.hint': 'This mount only serves repositories whose name matches its filter.',
+    'error.escapes.title': 'Address not allowed',
+    'error.escapes.hint': 'The address contains a path segment that would read outside the repository, so it was refused rather than cleaned up.',
     'error.rateLimit.title': 'Rate limited',
     'error.rateLimit.hint':
-      'GitHub allows 60 unauthenticated requests per hour per IP address. Try again shortly.',
+      'The upstream service allows a limited number of requests per hour per IP address. Try again shortly.',
     'error.network.title': 'Offline',
     'error.network.hint': 'The request could not reach the network.',
     'error.forbidden.title': 'Not accessible',
-    'error.forbidden.hint': 'GitHub refused to serve this repository. Private repositories are never mirrored.',
+    'error.forbidden.hint': 'The upstream refused to serve this repository. Private repositories are never mirrored.',
     'error.server.title': 'Upstream error',
     'error.server.hint': 'The upstream service returned an error.',
     'error.fallback.title': 'Something went wrong',
     'error.back': 'Back to {label}',
     'error.openOnGithub': 'Open on GitHub',
     'error.home': 'Home',
-    'error.route.filtered': '{repo} is not served from {prefix}.',
     'error.route.noMount': 'No page is served at {path}',
+    'error.route.escapes': 'That address points outside the served repository.',
     'error.route.generic': 'This page could not be rendered.',
   },
 
   ru: {
     'lang.label': 'Язык',
 
-    'nav.home': 'Главная',
-
     'home.tagline':
       'Личный сайт. Проекты, учёба и эксперименты — напрямую из публичных репозиториев GitHub.',
 
     'common.loading': 'Загрузка…',
-    'common.ready': 'готово',
-    'common.viewOnGithub': 'смотреть на GitHub',
-    'common.raw': 'оригинал',
-    'common.github': 'github',
-    'common.repoRoot': 'корень репозитория',
-    'common.download': 'Скачать',
     'common.openRaw': 'Открыть исходный файл',
-    'common.openAsPage': 'открыть как страницу',
 
-    'repoIndex.summary.one': '{count} публичный репозиторий',
-    'repoIndex.summary.few': '{count} публичных репозитория',
-    'repoIndex.summary.many': '{count} публичных репозиториев',
-    'repoIndex.hint': 'Выберите репозиторий, чтобы посмотреть файлы или запустить его.',
-    'repoIndex.filter': 'Только репозитории, имя которых начинается на «{prefix}».',
-    'repoIndex.updated': 'обновлён {date}',
-    'repoIndex.empty.title': 'Здесь пока нет репозиториев',
-    'repoIndex.empty.hint': 'Для {owner} в этом разделе пока нечего показать.',
+    'sites.title': 'Сайты',
+    'sites.hint': 'Каждый проект ниже — это репозиторий, показанный как тот сайт, которым он уже является.',
+    'sites.summary.one': '{count} сайт',
+    'sites.summary.few': '{count} сайта',
+    'sites.summary.many': '{count} сайтов',
+    'sites.summary.other': '{count} сайтов',
+    'sites.checking': 'Проверка репозиториев…',
+    'sites.empty.title': 'Сайтов пока нет',
+    'sites.empty.hint': 'Сейчас в списке ничего не отвечает. Попробуйте позже.',
 
-    'directory.parent': 'родительский каталог',
-    'directory.entry.one': '{count} запись',
-    'directory.entry.few': '{count} записи',
-    'directory.entry.many': '{count} записей',
-    'directory.kind.directory': 'каталог',
-    'directory.empty': 'Этот каталог пуст.',
-    'directory.breadcrumb': 'Навигационная цепочка',
-
-    'branch.hint': 'Сменить ветку',
-    'branch.list': 'Ветки',
-    'branch.loading': 'Загрузка веток…',
-    'branch.cached': 'Список веток из кэша.',
-    'branch.truncated': 'Показана только первая страница списка веток.',
-    'branch.switching': 'Переключение на {branch}…',
-    'branch.missing': 'Не удалось загрузить {branch}',
-    'branch.failed': 'Не удалось получить список веток',
-    'branch.rateLimit': 'Исчерпан лимит запросов к GitHub — попробуйте позже',
-
-    'browse.notFound.title': 'Путь не найден',
-    'browse.notFound.hint': '{path} не существует в этой ветке.',
-
-    'file.tooLarge.title': 'Файл слишком большой для отображения',
-    'file.tooLarge.hint': '{size} — откройте его напрямую.',
-    'file.binary.title': 'Двоичный файл',
-    'file.binary.hint': 'Этот файл нельзя показать в браузере.',
-
-    'page.tooLarge.title': 'Файл слишком большой для предпросмотра',
-    'page.tooLarge.hint': 'Откройте его напрямую.',
+    'site.missing.title': 'Здесь нет сайта',
+    'site.missing.hint': 'Этот репозиторий не в списке сайтов, либо у него нет входного файла.',
+    'site.notFound.title': 'Не найдено',
+    'site.notFound.hint': '{path} не существует в ветке {branch}.',
+    'site.unrenderable.title': 'Нечего показать',
+    'site.unrenderable.hint': 'Сайт — это HTML или markdown. Здесь ни то ни другое, поэтому он не отдаётся.',
+    'site.tooLarge.title': 'Файл слишком большой',
+    'site.tooLarge.hint': '{size} — больше, чем этот сайт показывает.',
 
     'error.notFound.title': 'Не найдено',
     'error.notFound.hint': 'Репозиторий не публичный, пустой или по этому пути ничего нет.',
     'error.noMount.title': 'Страница не найдена',
     'error.noMount.hint': 'Этот путь не обслуживается сайтом.',
-    'error.filtered.title': 'Нет в этом разделе',
-    'error.filtered.hint': 'В этом разделе доступны только репозитории, подходящие под фильтр.',
+    'error.escapes.title': 'Адрес недопустим',
+    'error.escapes.hint':
+      'Адрес содержит сегмент пути, который вышел бы за пределы репозитория, поэтому он отклонён, а не исправлен.',
     'error.rateLimit.title': 'Превышен лимит запросов',
     'error.rateLimit.hint':
-      'GitHub разрешает 60 неавторизованных запросов в час на IP-адрес. Попробуйте позже.',
+      'Внешний сервис разрешает ограниченное число запросов в час на IP-адрес. Попробуйте позже.',
     'error.network.title': 'Нет сети',
     'error.network.hint': 'Не удалось выполнить запрос к сети.',
     'error.forbidden.title': 'Нет доступа',
-    'error.forbidden.hint': 'GitHub отказался отдавать этот репозиторий. Приватные репозитории не публикуются.',
-    'error.server.title': 'Ошибка на стороне GitHub',
+    'error.forbidden.hint': 'Внешний сервис отказался отдавать этот репозиторий. Приватные репозитории не публикуются.',
+    'error.server.title': 'Ошибка на стороне сервиса',
     'error.server.hint': 'Внешний сервис вернул ошибку.',
     'error.fallback.title': 'Что-то пошло не так',
     'error.back': 'Назад: {label}',
     'error.openOnGithub': 'Открыть на GitHub',
     'error.home': 'Главная',
-    'error.route.filtered': '{repo} не обслуживается в {prefix}.',
     'error.route.noMount': 'Для {path} страница не найдена',
+    'error.route.escapes': 'Этот адрес указывает за пределы раздаваемого репозитория.',
     'error.route.generic': 'Не удалось отобразить страницу.',
   },
 };
@@ -185,7 +135,7 @@ const STRINGS = {
 const ERROR_KEYS = {
   'not-found': 'notFound',
   'no-mount': 'noMount',
-  filtered: 'filtered',
+  escapes: 'escapes',
   'rate-limit': 'rateLimit',
   network: 'network',
   forbidden: 'forbidden',
@@ -301,8 +251,4 @@ export function translateValue(value) {
   if (value === null || value === undefined) return value;
   if (typeof value === 'string') return value;
   return value[current] ?? value[fallbackCode()] ?? Object.values(value)[0];
-}
-
-export function formatNumber(value) {
-  return new Intl.NumberFormat(current).format(value);
 }

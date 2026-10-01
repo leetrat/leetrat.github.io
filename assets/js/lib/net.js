@@ -1,6 +1,9 @@
 /**
- * Network layer: typed errors plus a small localStorage cache so a browser
- * refresh does not spend another request against a rate limited upstream.
+ * Network layer: typed errors, plus a small localStorage cache so a repeat view
+ * does not spend another request.
+ *
+ * The CDN sends `Access-Control-Allow-Origin: *`, which is what lets a browser
+ * on this origin fetch repository bytes at all.
  */
 
 const CACHE_PREFIX = 'leetrat:v1:';
@@ -14,10 +17,50 @@ export class HttpError extends Error {
   }
 }
 
-/** Turns a failed response into a typed error with a message worth showing. */
-export async function toHttpError(response) {
+/**
+ * The error kind for a failed status, from the status and headers alone.
+ *
+ * Split out from `toHttpError` because reading the body is optional: an existence
+ * check cancels the response as soon as it knows the status, and must not then ask
+ * for a body it has already thrown away.
+ */
+function failureKind(response) {
   const status = response.status;
 
+  if (status === 404) return 'not-found';
+  if (status === 403 || status === 429) {
+    const remaining = response.headers.get('x-ratelimit-remaining');
+    return remaining === '0' || status === 429 ? 'rate-limit' : 'forbidden';
+  }
+  return 'server';
+}
+
+/** Turns a failed response into a typed error with a message worth showing. */
+async function describe(response, detail = '') {
+  const kind = failureKind(response);
+  const status = response.status;
+  const url = response.url;
+
+  if (kind === 'not-found') return new HttpError(kind, detail || 'Not found', { status, url });
+
+  if (kind === 'rate-limit') {
+    const resets = Number(response.headers.get('x-ratelimit-reset') || 0) * 1000;
+    const when = resets ? new Date(resets).toLocaleTimeString() : 'soon';
+    return new HttpError(kind, `Upstream rate limit reached, resets at ${when}`, { status, url, resets });
+  }
+
+  if (kind === 'forbidden') return new HttpError(kind, detail || 'Access denied', { status, url });
+
+  return new HttpError(kind, detail || `Request failed with status ${status}`, { status, url });
+}
+
+/**
+ * A failed response as a typed error, reading whatever detail the body holds.
+ *
+ * Upstreams answer with a JSON problem document when they answer at all; the
+ * message inside it is usually more use than the status.
+ */
+export async function toHttpError(response) {
   let detail = '';
   try {
     const body = await response.json();
@@ -25,29 +68,25 @@ export async function toHttpError(response) {
   } catch {
     /* not a JSON error body */
   }
+  return describe(response, detail);
+}
 
-  if (status === 404) {
-    return new HttpError('not-found', detail || 'Not found', { status, url: response.url });
+/**
+ * Fetch, turning a transport failure into a typed error.
+ *
+ * `fetch` rejects with a bare `TypeError` when the request never reached
+ * anything — offline, DNS, a blocked connection — which carries no kind and so
+ * would be rendered as an unexplained crash. Here it is the same shape as
+ * everything else, and reads as what it is.
+ */
+async function request(url) {
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw new HttpError('network', error?.message || 'The request could not be made', { url });
   }
-
-  if (status === 403 || status === 429) {
-    const remaining = response.headers.get('x-ratelimit-remaining');
-    const resets = Number(response.headers.get('x-ratelimit-reset') || 0) * 1000;
-    if (remaining === '0' || status === 429) {
-      const when = resets ? new Date(resets).toLocaleTimeString() : 'soon';
-      return new HttpError('rate-limit', `Upstream rate limit reached, resets at ${when}`, {
-        status,
-        url: response.url,
-        resets,
-      });
-    }
-    return new HttpError('forbidden', detail || 'Access denied', { status, url: response.url });
-  }
-
-  return new HttpError('server', detail || `Request failed with status ${status}`, {
-    status,
-    url: response.url,
-  });
+  return response;
 }
 
 function readCache(key) {
@@ -70,39 +109,19 @@ function writeCache(key, data) {
 }
 
 /**
- * Fetch JSON, reusing a cached copy while it is fresh.
+ * Resolve `load` at most once per `ttl` per browser.
  *
- * Resolves to `{ data, cached, stale, error }`. When the network fails but a
- * stale copy exists, the stale copy is returned with `stale: true` instead of
- * throwing, so the site degrades instead of breaking.
+ * Used for the "does this repository have a site" check, which is one request per
+ * repository per visitor and the only thing here worth remembering: the answer
+ * changes when a repository is pushed to, not between page loads.
  */
-export async function getJson(url, { ttl = 60_000, key = url, headers } = {}) {
-  const cached = readCache(key);
+export async function cached(key, ttl, load) {
+  const hit = readCache(key);
+  if (hit && Date.now() - hit.at < ttl) return hit.data;
 
-  if (cached && Date.now() - cached.at < ttl) {
-    return { data: cached.data, cached: true, stale: false };
-  }
-
-  let response;
-  try {
-    response = await fetch(url, {
-      headers: { Accept: 'application/vnd.github+json, application/json', ...headers },
-    });
-  } catch (cause) {
-    if (cached) return { data: cached.data, cached: true, stale: true, error: cause };
-    throw new HttpError('network', 'Network request failed', { url, cause });
-  }
-
-  if (!response.ok) {
-    const error = await toHttpError(response);
-    const recoverable = cached && (error.kind === 'rate-limit' || error.kind === 'server' || error.kind === 'network');
-    if (recoverable) return { data: cached.data, cached: true, stale: true, error };
-    throw error;
-  }
-
-  const data = await response.json();
+  const data = await load();
   writeCache(key, data);
-  return { data, cached: false, stale: false };
+  return data;
 }
 
 /** Decode a body using the charset advertised by the response. */
@@ -117,7 +136,7 @@ function decode(buffer, contentType) {
 
 /** Fetch text, optionally refusing to read bodies past `maxBytes`. */
 export async function getText(url, { maxBytes = Infinity } = {}) {
-  const response = await fetch(url);
+  const response = await request(url);
   if (!response.ok) throw await toHttpError(response);
 
   const declared = Number(response.headers.get('content-length') || 0);
@@ -138,6 +157,29 @@ export async function getText(url, { maxBytes = Infinity } = {}) {
   };
 }
 
+/**
+ * Whether a URL resolves, without downloading the body.
+ *
+ * The response is cancelled as soon as the status is known, so an existence check
+ * costs headers rather than a file. A 404 throws a `not-found` `HttpError`, which
+ * is how callers tell "absent" from "unreachable".
+ */
+export async function exists(url) {
+  const response = await request(url);
+
+  if (response.ok) {
+    response.body?.cancel();
+    return true;
+  }
+
+  // The kind comes from the status and headers; the body is released unread,
+  // because a check should cost headers rather than a file.
+  const error = await describe(response);
+  response.body?.cancel();
+  throw error;
+}
+
+/** A remembered value that never expires on its own. */
 export function readPersistent(key) {
   const entry = readCache(`persistent:${key}`);
   return entry ? entry.data : null;
