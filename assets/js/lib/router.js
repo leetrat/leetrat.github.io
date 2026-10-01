@@ -164,21 +164,37 @@ export function sitePath(mount, repo, path = '', branch = null) {
   return withBranch(mountPath(mount, repo, path), branch);
 }
 
-/** The `sites` entry for a repository, or null when it is not one of ours. */
-export function siteFor(repo, config = CONFIG) {
+/**
+ * The `sites` entry for a repository, or null when nothing overrides it.
+ *
+ * This is an override table, not an allowlist: any repository under the owner can
+ * be fetched by path, and an entry here only pins the branch or entry file that
+ * differ from the defaults. A repository with no entry is not refused, it is
+ * served from the default branch at whatever path the URL names.
+ */
+export function overridesFor(repo, config = CONFIG) {
   return (config.sites || []).find((site) => site.name === repo) || null;
 }
 
 /**
- * The file that *is* a repository's site: the site's own `entry`, the mount's
- * default, or `index.html`. There is no directory convention and no probing for
- * an index file, so this is always the same file for a given config.
+ * The file that *is* a repository's site: its own `entry` when one is declared,
+ * the mount's default, or `index.html`. There is no probing for an index file, so
+ * this is always the same file for a given config.
  */
-export function entryFor(site, mount, config = CONFIG) {
-  return site?.entry || mount?.entry || 'index.html';
+export function entryFor(overrides, mount, config = CONFIG) {
+  // An entry of `/` means the repository root, which is the same as not
+  // overriding at all. Normalizing here keeps `''` and `'/'` from reaching the
+  // URL builder as a path of `//index.html`.
+  const declared = String(overrides?.entry ?? '').replace(/^\/+|\/+$/g, '');
+  return declared || mount?.entry || 'index.html';
 }
 
-/** The branch a repository is served from, as declared in config. */
-export function branchFor(site) {
-  return site?.branch || 'main';
+/**
+ * The branch a repository is served from when nothing has been pinned.
+ *
+ * `main`, because that is what these repositories use and because there is no
+ * branch discovery to consult: `?branch=` is how any other branch is reached.
+ */
+export function branchFor(overrides) {
+  return overrides?.branch || 'main';
 }

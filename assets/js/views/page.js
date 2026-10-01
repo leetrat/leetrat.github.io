@@ -16,7 +16,7 @@
  * is not sandboxed, and should not be treated as though it were.
  */
 
-import { el } from '../lib/dom.js';
+import { el, spinner } from '../lib/dom.js';
 import { CONFIG } from '../config.js';
 import { cdnDirUrl } from '../lib/github.js';
 import { formatBytes } from '../lib/format.js';
@@ -92,6 +92,29 @@ export function serveDocument(html, { repo, branch, path, stop }) {
   // Nothing to render into any more. The caller still has to return something,
   // so this is a node that is never appended.
   return el('span', { class: 'sr-only' });
+}
+
+/**
+ * Hand a file to the browser and step aside.
+ *
+ * An image, a video, a PDF, a font — the browser already knows what to do with all
+ * of it, and so does the CDN, which serves it with a real `Content-Type` and
+ * `Content-Disposition`. Re-encoding any of that into this page would be strictly
+ * worse, so the file is served raw: the address bar ends up on the CDN URL, the
+ * same place a direct link to the image would have taken the reader, and the file
+ * is visible, playable or downloadable as itself.
+ *
+ * `replace` rather than `assign`, matching the retired-prefix redirect: the site
+ * URL should not become a history entry the back button has to step through to get
+ * past a file the reader came here to see.
+ *
+ * Markdown images already behave this way — `views/file.js` rewrites them to CDN
+ * URLs rather than to routes — so this is the same rule applied to the file the
+ * reader asked for directly.
+ */
+export function serveRaw(url) {
+  location.replace(url);
+  return spinner();
 }
 
 /** A file that is too large to be written over the page, as a normal panel. */

@@ -79,21 +79,25 @@ export const CONFIG = {
     { prefix: '/v', subview: 'site', entry: 'index.html' },
   ],
 
-  /**
-   * Sites: the repositories a site mount may serve, and what to serve from them.
+/**
+   * Sites: per-repository overrides for what a mount would otherwise default to.
    *
-*   { name: 'itmo-web', branch: 'main', entry: 'lab_1/index.html' }
+   *   { name: 'itmo-web', branch: 'main', entry: 'lab_1/index.html' }
    *
    *   name   the repository, required
-   *   branch the branch to serve from, required
+   *   branch the branch to serve from, defaults to 'main'
    *   entry  the file that *is* the site, defaults to the mount's `entry`
    *
-   * `branch` is required rather than probed: a served document has no header, so
+   * This is an override table, not an allowlist. Any repository under `owner` is
+   * served at whatever path the URL names — `/v/itmo-oomd/README.md` is a file at
+   * a path, not something that had to be registered. An entry here exists only to
+   * pin the branch or entry file that differ from the defaults, so a repository
+   * whose site lives somewhere other than its root needs one line and every other
+   * repository needs none.
+   *
+   * `branch` is declared rather than probed: a served document has no header, so
    * there is no branch picker to switch with. `?branch=<name>` on any mount URL
    * overrides it for one page and is remembered per browser.
-   *
-   * A repository that is not listed here cannot be served at all, so this is the
-   * whole allowlist of what `/v` will answer for.
    */
   sites: [
     { name: 'itmo-web', branch: 'main', entry: '/' },
@@ -200,7 +204,10 @@ export function validateConfig(config = CONFIG) {
   const names = new Set();
   config.sites.forEach((site, index) => {
     if (!site.name) problem(`sites[${index}] has no name`);
-    if (!site.branch) problem(`sites[${index}] ("${site.name}") has no branch`);
+    // `branch` is not required: an override exists only to pin what differs from
+    // the default, and the default is `main`. Requiring it here would reject the
+    // entry-only override that is the whole reason to have the table.
+    if (site.branch !== undefined && !site.branch) problem(`sites[${index}] ("${site.name}") has an empty branch`);
     if (names.has(site.name)) problem(`sites[${index}] repeats "${site.name}"`);
     names.add(site.name);
   });

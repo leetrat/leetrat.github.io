@@ -35,12 +35,11 @@ const STRINGS = {
     'common.openRaw': 'Open raw file',
 
 
-    'site.missing.title': 'No site here',
-    'site.missing.hint': 'This repository is not one of the sites, or its entry file is missing.',
+    'site.noEntry.title': 'No site here',
+    'site.noEntry.hint':
+      '{path} has no index.html at its root, so there is nothing to show here. Any file inside it is still reachable by its path.',
     'site.notFound.title': 'Not found',
     'site.notFound.hint': '{path} does not exist on {branch}.',
-    'site.unrenderable.title': 'Nothing to show',
-    'site.unrenderable.hint': 'A site is an HTML or markdown file. This is neither, so it is not served.',
     'site.tooLarge.title': 'File too large to show',
     'site.tooLarge.hint': '{size} is more than this site renders.',
 
@@ -78,12 +77,11 @@ const STRINGS = {
     'common.openRaw': 'Открыть исходный файл',
 
 
-    'site.missing.title': 'Здесь нет сайта',
-    'site.missing.hint': 'Этот репозиторий не в списке сайтов, либо у него нет входного файла.',
+    'site.noEntry.title': 'Здесь нет сайта',
+    'site.noEntry.hint':
+      'В корне {path} нет index.html, поэтому здесь показать нечего. Любой файл внутри всё равно доступен по пути.',
     'site.notFound.title': 'Не найдено',
     'site.notFound.hint': '{path} не существует в ветке {branch}.',
-    'site.unrenderable.title': 'Нечего показать',
-    'site.unrenderable.hint': 'Сайт — это HTML или markdown. Здесь ни то ни другое, поэтому он не отдаётся.',
     'site.tooLarge.title': 'Файл слишком большой',
     'site.tooLarge.hint': '{size} — больше, чем этот сайт показывает.',
 

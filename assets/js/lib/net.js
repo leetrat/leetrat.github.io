@@ -118,26 +118,61 @@ function decode(buffer, contentType) {
   }
 }
 
+/**
+ * Whether a content type is worth reading into memory as text.
+ *
+ * Used to decide whether the body has to be downloaded at all. An image, a video
+ * or a PDF is not something this site can typeset, so decoding its bytes as text
+ * would be work thrown away — and for a large file, work thrown away slowly.
+ */
+export function isTextual(contentType) {
+  const type = String(contentType || '').split(';')[0].trim().toLowerCase();
+
+  // An absent type is assumed textual: a file with no extension and no declared
+  // type (`LICENSE`, `Makefile`) is more often source than pixels, and decoding it
+  // is harmless when that guess is wrong.
+  if (!type) return true;
+  if (type.startsWith('text/')) return true;
+  if (type.endsWith('+json') || type.endsWith('+xml')) return true;
+
+  return ['application/json', 'application/xml', 'application/javascript',
+    'application/x-javascript', 'application/ecmascript', 'application/x-sh',
+    'application/x-yaml', 'application/yaml', 'application/toml',
+  ].includes(type);
+}
+
 /** Fetch text, optionally refusing to read bodies past `maxBytes`. */
 export async function getText(url, { maxBytes = Infinity } = {}) {
   const response = await request(url);
   if (!response.ok) throw await toHttpError(response);
 
   const declared = Number(response.headers.get('content-length') || 0);
+  const contentType = response.headers.get('content-type') || '';
+
   if (declared && declared > maxBytes) {
-    return { tooBig: true, size: declared, url: response.url };
+    response.body?.cancel();
+    return { tooBig: true, size: declared, url: response.url, contentType };
+  }
+
+  // A binary file is not going to be typeset, so it is handed to the browser by URL
+  // rather than downloaded here. The status has already told us it exists, which is
+  // all the caller needs to decide that.
+  if (!isTextual(contentType)) {
+    response.body?.cancel();
+    return { notText: true, contentType, size: declared, url: response.url };
   }
 
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength > maxBytes) {
-    return { tooBig: true, size: buffer.byteLength, url: response.url };
+    return { tooBig: true, size: buffer.byteLength, url: response.url, contentType };
   }
 
   return {
     tooBig: false,
-    text: decode(buffer, response.headers.get('content-type')),
+    text: decode(buffer, contentType),
     size: buffer.byteLength,
     url: response.url,
+    contentType,
   };
 }
 
