@@ -19,7 +19,7 @@
 import { CONFIG } from '../config.js';
 import { el } from '../lib/dom.js';
 import { readFile } from '../lib/github.js';
-import { isHtml, isMarkdown } from '../lib/format.js';
+import { isHtml, isMarkdown, hasExtension } from '../lib/format.js';
 import { entryFor, branchFor, siteFor } from '../lib/router.js';
 import { readPersistent, writePersistent } from '../lib/net.js';
 import { t } from '../lib/i18n.js';
@@ -63,7 +63,19 @@ export async function renderSite({ mount, repo, path, branch: wanted }, { stop }
   }
 
   const branch = resolveBranch(repo, wanted);
-  const file = path || entryFor(site, mount);
+  const requested = path || entryFor(site, mount);
+
+  // A path with no extension names a directory, and a directory on the web is its
+  // index file: `/v/itmo-web/lab_1` is `lab_1/index.html`. This is one rule
+  // applied up front, not a search — the file is derived from the path, never
+  // probed for. It is also why a repository with several `index.html` files works
+  // without any listing: each one is simply reachable at its own directory URL.
+  const file = hasExtension(requested) ? requested : `${requested}/index.html`;
+
+  // Relative links inside the document have to resolve against the directory the
+  // file really is in, which for a directory URL is the directory, not the
+  // `index.html` we appended to fetch it.
+  const base = hasExtension(requested) ? requested : `${requested}/`;
   const pinned = branch === branchFor(site) ? null : branch;
 
   let result = null;
@@ -76,21 +88,28 @@ export async function renderSite({ mount, repo, path, branch: wanted }, { stop }
     // common case for a URL somebody typed by hand, so it gets its own message.
     if (!path) return renderEmpty(t('site.missing.title'), t('site.missing.hint'));
 
+    // Report the URL that was asked for, not the file that was derived from it:
+    // `/v/itmo-web/lab_1` failing should not read as `lab_1/index.html` missing.
     return renderEmpty(
       t('site.notFound.title'),
-      t('site.notFound.hint', { path: `${repo}/${file}`, branch }),
+      t('site.notFound.hint', { path: `${repo}/${requested}`, branch }),
     );
   }
 
   if (result.tooBig) return renderTooLarge(result.size, result.url);
 
   if (isHtml(file)) {
-    return serveDocument(result.text, { repo, branch, path: file, stop });
+    return serveDocument(result.text, { repo, branch, path: base, stop });
   }
 
   if (isMarkdown(file)) {
-    return renderMarkdownFile({ mount, repo, branch, path: file, pin: pinned, text: result.text });
+    return renderMarkdownFile({ mount, repo, branch, path: base, pin: pinned, text: result.text });
   }
+
+  // Reached only for a path that resolved to a real file of some other type: an
+  // image, a script, a stylesheet. Those are real files, so this is not a missing
+  // page — it is a page this site has no way to show.
+  console.info(`[leetrat] ${repo}/${file} is not a document this site renders`);
 
   return el('div', { class: 'doc' }, renderEmpty(t('site.unrenderable.title'), t('site.unrenderable.hint')));
 }

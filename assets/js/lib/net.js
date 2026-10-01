@@ -108,22 +108,6 @@ function writeCache(key, data) {
   }
 }
 
-/**
- * Resolve `load` at most once per `ttl` per browser.
- *
- * Used for the "does this repository have a site" check, which is one request per
- * repository per visitor and the only thing here worth remembering: the answer
- * changes when a repository is pushed to, not between page loads.
- */
-export async function cached(key, ttl, load) {
-  const hit = readCache(key);
-  if (hit && Date.now() - hit.at < ttl) return hit.data;
-
-  const data = await load();
-  writeCache(key, data);
-  return data;
-}
-
 /** Decode a body using the charset advertised by the response. */
 function decode(buffer, contentType) {
   const charset = /charset=["']?([\w-]+)/i.exec(contentType || '')?.[1];
@@ -155,28 +139,6 @@ export async function getText(url, { maxBytes = Infinity } = {}) {
     size: buffer.byteLength,
     url: response.url,
   };
-}
-
-/**
- * Whether a URL resolves, without downloading the body.
- *
- * The response is cancelled as soon as the status is known, so an existence check
- * costs headers rather than a file. A 404 throws a `not-found` `HttpError`, which
- * is how callers tell "absent" from "unreachable".
- */
-export async function exists(url) {
-  const response = await request(url);
-
-  if (response.ok) {
-    response.body?.cancel();
-    return true;
-  }
-
-  // The kind comes from the status and headers; the body is released unread,
-  // because a check should cost headers rather than a file.
-  const error = await describe(response);
-  response.body?.cancel();
-  throw error;
 }
 
 /** A remembered value that never expires on its own. */

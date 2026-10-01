@@ -8,7 +8,7 @@
  */
 
 import { CONFIG } from '../config.js';
-import { getText, exists } from './net.js';
+import { getText } from './net.js';
 
 const OWNER = CONFIG.owner;
 
@@ -74,18 +74,3 @@ export async function readFile(repo, branch, path, options = {}) {
   throw lastError;
 }
 
-/**
- * Whether a repository's entry file is really there.
- *
- * Resolves `false` only for a genuine 404, and rethrows anything else, so a
- * network blip is never mistaken for a missing site: the caller decides whether
- * to hide an entry or keep it.
- */
-export async function hasFile(repo, branch, path) {
-  try {
-    return await exists(cdnUrl(repo, branch, path));
-  } catch (error) {
-    if (error?.kind === 'not-found') return false;
-    throw error;
-  }
-}

@@ -25,3 +25,13 @@ export function isHtml(path) {
 export function isMarkdown(path) {
   return ['md', 'markdown', 'mdown', 'mkd'].includes(extension(path));
 }
+
+/**
+ * Whether a path names a file rather than a directory.
+ *
+ * The distinction is the extension, not a request: `README` and `Makefile` have
+ * none and are files, which is why this is a naming convention and not a lookup.
+ */
+export function hasExtension(path) {
+  return extension(path) !== '';
+}

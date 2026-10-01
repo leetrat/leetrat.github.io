@@ -5,6 +5,9 @@
  * route's view up in the registry, hand it a context, and render whatever it
  * returns into the outlet. Adding a new kind of page means adding one entry to
  * `VIEWS` and naming it from a section or a mount in `config.js`.
+ *
+ * Every page a section can reach has a header; every page a mount serves replaces
+ * the document it is served into. Nothing else is reachable.
  */
 
 import { CONFIG, validateConfig } from './config.js';
@@ -13,7 +16,6 @@ import { createNavigator } from './lib/nav.js';
 import { spinner, clear, el } from './lib/dom.js';
 import { t, translateValue, onLanguageChange } from './lib/i18n.js';
 import { renderHome } from './views/home.js';
-import { renderSites } from './views/sites.js';
 import { renderSite } from './views/site.js';
 import { renderError } from './views/error.js';
 import { renderLanguageSwitcher } from './views/language-switcher.js';
@@ -21,7 +23,6 @@ import { renderLanguageSwitcher } from './views/language-switcher.js';
 /** Route view name -> renderer. Replace an entry to swap an implementation. */
 export const VIEWS = {
   home: renderHome,
-  sites: renderSites,
   site: renderSite,
   retired: redirect,
   error: (route) => renderError(describeRouteError(route), { section: route.section, repo: route.repo }),
@@ -67,8 +68,6 @@ function documentTitle(route) {
   switch (route.view) {
     case 'home':
       return CONFIG.owner;
-    case 'sites':
-      return `${translateValue(route.section?.label) || t('sites.title')} · ${CONFIG.owner}`;
     case 'site':
       // A served document sets its own title from its own markup; this only
       // applies to a markdown file, which is rendered into this page.

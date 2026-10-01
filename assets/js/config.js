@@ -39,7 +39,10 @@ export const CONFIG = {
    * `href` is any path on this site. It usually points at a mount, in which case
    * the mount decides what renders and `view` can be left out:
    *
-   *   { label: 'Sites', href: '/v' }          -> the mount root renders /v
+   *   { label: 'Sites', href: '/v/itmo-web' }  -> the mount renders the repository
+   *
+   * Note that a section can point *into* a mount, but not at a mount root: a
+   * mount root renders nothing, so there is no page there to link a header to.
    *
    * Give a section its own `view` and it owns that URL outright, which is how a
    * section carries content of its own instead of repository content:
@@ -50,62 +53,50 @@ export const CONFIG = {
    */
   sections: [
     { label: { en: 'Home', ru: 'Главная' }, href: '/' },
-    { label: { en: 'Sites', ru: 'Сайты' }, href: '/v', home: true },
   ],
 
   /**
    * Mounts: the URLs this site serves.
    *
-   *   { prefix: '/v', view: 'sites', subview: 'site', entry: 'index.html' }
+   *   { prefix: '/v', subview: 'site', entry: 'index.html' }
    *
    * A mount claims its prefix *and every subpath below it*, so `/v` automatically
    * claims `/v/<repo>` and `/v/<repo>/a/b/c.html`. Longest prefix wins, so mounts
    * can overlap.
    *
    *   prefix   the URL prefix, matched longest first
-   *   view     renders the mount root, `/prefix`
    *   subview  renders `/prefix/<repo>` and everything under it
    *   entry    default file for a bare repository; a `sites` entry overrides it
    *
-   * Neither field is special: `view` and `subview` are names in the `VIEWS` map
-   * in `main.js`. Nothing here reaches the header on its own, see `sections`.
+   * There is no `view`, so the mount root renders nothing: a mount exists to
+   * serve files, and a URL that names no file has nothing to serve. `/v` on its
+   * own is not served.
+   *
+   * `subview` is a name in the `VIEWS` map in `main.js`. Nothing here reaches the
+   * header on its own, see `sections`.
    */
   mounts: [
-    { prefix: '/v', view: 'sites', subview: 'site', entry: 'index.html' },
+    { prefix: '/v', subview: 'site', entry: 'index.html' },
   ],
 
   /**
    * Sites: the repositories a site mount may serve, and what to serve from them.
    *
-   *   {
-   *     name: 'itmo-web',
-   *     branch: 'main',
-   *     entry: 'lab_1/index.html',
-   *     title: 'Web programming',
-   *     description: 'Coursework, 2026',
-   *   }
+*   { name: 'itmo-web', branch: 'main', entry: 'lab_1/index.html' }
    *
-   *   name        the repository, required
-   *   branch      the branch to serve from, required
-   *   entry       the file that *is* the site, defaults to the mount's `entry`
-   *   title       shown in the list instead of the repository name
-   *   description one line under the title
+   *   name   the repository, required
+   *   branch the branch to serve from, required
+   *   entry  the file that *is* the site, defaults to the mount's `entry`
    *
    * `branch` is required rather than probed: a served document has no header, so
    * there is no branch picker to switch with. `?branch=<name>` on any mount URL
    * overrides it for one page and is remembered per browser.
    *
-   * The list is checked on load: a repository whose `entry` is missing is left
-   * out of `/v`, so the list only ever shows sites that actually answer.
+   * A repository that is not listed here cannot be served at all, so this is the
+   * whole allowlist of what `/v` will answer for.
    */
   sites: [
-    {
-      name: 'itmo-web',
-      branch: 'main',
-      entry: 'lab_1/index.html',
-      title: 'Web programming',
-      description: 'Coursework, ITMO, 2026',
-    },
+    { name: 'itmo-web', branch: 'main', entry: '/' },
   ],
 
   /**
@@ -135,11 +126,6 @@ export const CONFIG = {
      * with this on; pages that already prefix their paths are unaffected.
      */
     rewriteRootRelative: true,
-  },
-
-  cache: {
-    /** The "does this repository have a site" check, which is one request each. */
-    sitesTtlMs: 60 * 60_000,
   },
 
   limits: {
@@ -174,7 +160,6 @@ export function validateConfig(config = CONFIG) {
 
   config.mounts.forEach((mount, index) => {
     if (!mount.prefix) problem(`mounts[${index}] has no prefix`);
-    if (!mount.view) problem(`mounts[${index}] has no view`);
     if (!mount.subview) problem(`mounts[${index}] has no subview`);
     const prefix = normalize(mount.prefix);
     if (mountPrefixes.has(prefix)) problem(`mounts[${index}] repeats "${mount.prefix}", already used by ${mountPrefixes.get(prefix)}`);
@@ -184,18 +169,31 @@ export function validateConfig(config = CONFIG) {
   config.sections.forEach((section, index) => {
     const href = normalize(section.href);
 
-    // A section that renders a view of its own cannot also sit on a mount's
-    // prefix: two things would own one URL and only one would ever be reached.
-    const mount = mountPrefixes.get(href);
+    // The mount that serves this href, if any: a mount serves its own prefix and
+    // every path below it, so a section may point *into* a mount rather than at
+    // it. `/v` itself is the one path no mount serves, since a mount root renders
+    // nothing.
+    const mount = [...mountPrefixes]
+      .filter(([prefix]) => href === prefix || href.startsWith(`${prefix}/`))
+      .sort((a, b) => b[0].length - a[0].length)[0];
+
+    // A section that renders a view of its own cannot also sit under a mount:
+    // two things would own one URL and only one would ever be reached.
     if (mount && section.view) {
-      problem(`sections[${index}] ("${section.href}") declares its own view, but ${mount} already serves that path`);
+      problem(`sections[${index}] ("${section.href}") declares its own view, but ${mount[1]} already serves that path`);
     }
 
-    // Otherwise a header link has to land somewhere: on its own view, on a
+    // Otherwise a header link has to land somewhere: on its own view, under a
     // mount, or on the home page, which every site serves. Anything else goes
     // nowhere, and the failure would not show up until the link was clicked.
     if (!section.view && href !== '/' && !mount) {
       problem(`sections[${index}] ("${section.href}") has no view, and no mount serves that path`);
+    }
+
+    // A mount root renders nothing, so a header link pointing at one would be a
+    // link to a page that does not exist. Point into the mount instead.
+    if (!section.view && mount && mount[0] === href) {
+      problem(`sections[${index}] ("${section.href}") points at a mount root, which is not a page`);
     }
   });
 

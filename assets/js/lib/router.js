@@ -125,15 +125,16 @@ export function resolve(pathname, config = CONFIG) {
   // A section with content of its own does not defer to a mount.
   if (section?.view) return { view: section.view, section, mount };
 
-  if (mount && path === normalizePath(mount.prefix)) {
-    return { view: mount.view, section: sectionAt(config, mount.prefix), mount };
-  }
-
   if (path === '/') return { view: 'home', section: sectionAt(config, '/') };
 
   if (mount) {
     const prefix = normalizePath(mount.prefix);
     const [repo, ...segments] = path.slice(prefix.length).replace(/^\/+/, '').split('/');
+
+    // The mount root itself names no repository, so it names no file. There is no
+    // index and no listing to fall back to; `/v` is simply not a page.
+    if (!repo) return { view: 'error', reason: 'no-mount', path };
+
     return {
       view: mount.subview,
       section: sectionAt(config, prefix),

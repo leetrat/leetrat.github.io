@@ -6,9 +6,9 @@
  * the language changes. Adding a language means adding one entry to `LANGUAGES`
  * and one table in `STRINGS`; nothing else in the codebase names a language.
  *
- * Plural forms use `Intl.PluralRules`, so keys may be suffixed with the CLDR
- * category (`sites.summary.one`, `sites.summary.few`, `sites.summary.other`)
- * and looked up with `t('sites.summary', { count })`.
+ * Plural forms use `Intl.PluralRules`, so a key may be suffixed with the CLDR
+ * category (`item.one`, `item.few`, `item.other`) and looked up with
+ * `t('item', { count })`.
  *
  * Section labels are not here: they live in `config.js` and go through
  * `translateValue`, so a section can be added without touching this file.
@@ -34,15 +34,6 @@ const STRINGS = {
     'common.loading': 'Loading…',
     'common.openRaw': 'Open raw file',
 
-    'sites.title': 'Sites',
-    'sites.hint': 'Every project below is a repository, served as the website it already is.',
-    'sites.summary.one': '{count} site',
-    'sites.summary.few': '{count} sites',
-    'sites.summary.many': '{count} sites',
-    'sites.summary.other': '{count} sites',
-    'sites.checking': 'Checking repositories…',
-    'sites.empty.title': 'No sites yet',
-    'sites.empty.hint': 'Nothing in the list answers at the moment. Try again later.',
 
     'site.missing.title': 'No site here',
     'site.missing.hint': 'This repository is not one of the sites, or its entry file is missing.',
@@ -86,15 +77,6 @@ const STRINGS = {
     'common.loading': 'Загрузка…',
     'common.openRaw': 'Открыть исходный файл',
 
-    'sites.title': 'Сайты',
-    'sites.hint': 'Каждый проект ниже — это репозиторий, показанный как тот сайт, которым он уже является.',
-    'sites.summary.one': '{count} сайт',
-    'sites.summary.few': '{count} сайта',
-    'sites.summary.many': '{count} сайтов',
-    'sites.summary.other': '{count} сайтов',
-    'sites.checking': 'Проверка репозиториев…',
-    'sites.empty.title': 'Сайтов пока нет',
-    'sites.empty.hint': 'Сейчас в списке ничего не отвечает. Попробуйте позже.',
 
     'site.missing.title': 'Здесь нет сайта',
     'site.missing.hint': 'Этот репозиторий не в списке сайтов, либо у него нет входного файла.',
