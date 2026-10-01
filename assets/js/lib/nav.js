@@ -55,7 +55,7 @@ export function createNavigator({ onNavigate }) {
     onNavigate(url);
   };
 
-  document.addEventListener('click', (event) => {
+  const onClick = (event) => {
     if (isModified(event) || event.defaultPrevented) return;
     const link = closestLink(event);
     if (!isInternalLink(link)) return;
@@ -63,9 +63,25 @@ export function createNavigator({ onNavigate }) {
     event.preventDefault();
     const url = new URL(link.href, location.origin);
     go(`${url.pathname}${url.search}${url.hash}`);
-  });
+  };
 
-  window.addEventListener('popstate', () => onNavigate(new URL(location.href)));
+  const onPopState = () => onNavigate(new URL(location.href));
 
-  return { go };
+  document.addEventListener('click', onClick);
+  window.addEventListener('popstate', onPopState);
+
+  return {
+    go,
+    /**
+     * Detach from the page.
+     *
+     * A served document takes over the window: its links and its back button
+     * are its own, and a router still listening would swallow both. Called
+     * before the document is written, so the two never overlap.
+     */
+    stop() {
+      document.removeEventListener('click', onClick);
+      window.removeEventListener('popstate', onPopState);
+    },
+  };
 }

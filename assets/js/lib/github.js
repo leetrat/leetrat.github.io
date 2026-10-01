@@ -194,11 +194,13 @@ export function listDir(manifest, dir = '') {
   return [...entries.values()].sort(compareEntries);
 }
 
-export function indexHtmlOf(entries) {
-  return entries.find((entry) => entry.type === 'file' && /^index\.html?$/i.test(entry.name)) || null;
-}
-
-/** Classify a repository path as a directory, a file, or missing. */
+/**
+ * Classify a repository path as a directory, a file, or missing.
+ *
+ * A directory stays a directory even when it holds an `index.html`: the file is
+ * listed alongside its siblings and opened on its own terms, so a repository's
+ * structure is never hidden behind a convention.
+ */
 export function resolvePath(manifest, path = '') {
   const clean = String(path || '').replace(/^\/+|\/+$/g, '');
 

@@ -4,7 +4,7 @@
  */
 
 import { el } from '../lib/dom.js';
-import { getManifest, resolvePath, indexHtmlOf } from '../lib/github.js';
+import { getManifest, resolvePath } from '../lib/github.js';
 import { breadcrumbs, mountPath } from '../lib/router.js';
 import { isHtml, isIsolatable } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
@@ -30,31 +30,20 @@ function breadcrumbBar({ mount, repo, manifest, path, rerender }) {
   );
 }
 
-/** Trailing-slash URLs and directory index files both resolve to the index. */
-function resolveTarget(manifest, path) {
-  const result = resolvePath(manifest, path);
-
-  if (result.kind === 'dir') {
-    const index = indexHtmlOf(result.entries);
-    if (index) {
-      const indexPath = result.path ? `${result.path}/${index.name}` : index.name;
-      return { kind: 'file', path: indexPath, entry: index };
-    }
-  }
-
-  return result;
-}
-
 export async function renderBrowse(route, ctx) {
   const { mount, repo, path } = route;
   const manifest = await getManifest(repo);
 
-  const result = resolveTarget(manifest, path);
+  // A directory is always a directory. An `index.html` inside it is a file like
+  // any other and is listed as one, so the tree a repository actually has is
+  // the tree on screen. Opening that file is a separate, explicit step.
+  const result = resolvePath(manifest, path);
   const label = path ? `${repo}/${path}` : repo;
 
-  // The isolated view only claims files it can present as a page. A directory
-  // without an index, a binary file or a missing path keeps the normal view,
-  // which has the breadcrumb and the links needed to recover from there.
+  // The served view is reachable only by asking for it: the URL carries
+  // `?as=1`, which nothing in this function adds. A directory, a binary file
+  // and a missing path all keep the normal view, which has the breadcrumb and
+  // the links needed to recover from there.
   if (route.isolated && result.kind === 'file' && isIsolatable(result.path)) {
     return renderIsolated({ mount, repo, manifest, path: result.path, entry: result.entry, hash: route.hash, ctx });
   }

@@ -8,7 +8,7 @@
  */
 
 import { CONFIG } from './config.js';
-import { resolve, listedMounts, wantsIsolated } from './lib/router.js';
+import { resolve, listedMounts, wantsIsolated, ISOLATED_PARAM } from './lib/router.js';
 import { createNavigator } from './lib/nav.js';
 import { spinner, clear, el } from './lib/dom.js';
 import { t, translateValue, onLanguageChange } from './lib/i18n.js';
@@ -38,6 +38,26 @@ function describeRouteError(route) {
 }
 
 const outlet = document.getElementById('app');
+
+/**
+ * Set when a view has written a document over the page instead of rendering
+ * into the outlet. The site is inert from that point: the router is detached
+ * and the outlet this module holds no longer belongs to the document.
+ */
+let served = false;
+
+/**
+ * Hand the window to a document. Called by a view before it writes, so the
+ * router stops swallowing the clicks and the history that now belong to the
+ * document. After this the site is inert: nothing re-renders, and the outlet
+ * this module holds is not part of the document any more.
+ */
+function stop() {
+  served = true;
+  navigator.stop();
+  document.removeEventListener('keydown', onEscape);
+  unsubscribeLanguage();
+}
 
 function documentTitle(route, isolated = Boolean(route.isolated)) {
   switch (route.view) {
@@ -87,7 +107,10 @@ function applyChrome(node, route) {
 // goes back the way the reader arrived when there was a page to go back to, and
 // otherwise to the same file in the normal view, so it can never strand someone
 // on a blank page or drop them out of the site.
-document.addEventListener('keydown', (event) => {
+//
+// A served document has its own Escape behaviour, if any, so this is removed
+// before that document is written.
+function onEscape(event) {
   if (event.key !== 'Escape' || !document.body.classList.contains('is-isolated')) return;
 
   let from = null;
@@ -103,9 +126,11 @@ document.addEventListener('keydown', (event) => {
   }
 
   const url = new URL(location.href);
-  url.searchParams.delete('as');
+  url.searchParams.delete(ISOLATED_PARAM);
   location.replace(`${url.pathname}${url.search}${url.hash}`);
-});
+}
+
+document.addEventListener('keydown', onEscape);
 
 /** Render a route. Returns the promise so callers can await a settled view. */
 export async function renderRoute(route) {
@@ -115,7 +140,16 @@ export async function renderRoute(route) {
   clear(outlet).append(spinner(t('common.loading')));
 
   try {
-    const node = await view(route, { config: CONFIG, navigate, rerender: () => renderRoute(currentRoute()) });
+    const node = await view(route, {
+      config: CONFIG,
+      navigate,
+      rerender: () => renderRoute(currentRoute()),
+      stop,
+    });
+    // A view can take the document over rather than render into it. The outlet
+    // is gone by then, so there is nothing to restore chrome onto and nothing
+    // left to append to.
+    if (served) return;
     if (!node) throw new Error(`View "${route.view}" returned nothing`);
     applyChrome(node, route);
     clear(outlet).append(node);
@@ -181,7 +215,7 @@ function buildChrome() {
 
 // Switching language rebuilds the chrome and re-renders the current route, so
 // every string on screen is refreshed at once.
-onLanguageChange(() => {
+const unsubscribeLanguage = onLanguageChange(() => {
   buildChrome();
   renderRoute(currentRoute());
 });

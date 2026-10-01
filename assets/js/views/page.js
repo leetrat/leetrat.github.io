@@ -1,14 +1,14 @@
 /**
- * HTML preview.
+ * HTML documents.
  *
- * The document is fetched as text, given a `<base>` pointing at the CDN so its
- * own relative CSS/JS/images resolve, and rendered inside a sandboxed iframe.
- * Scripts therefore run in an origin-isolated frame and cannot reach this
- * site's DOM, storage or cookies.
+ * A repository's page has two lives here. Inside a mount it is a *preview*: the
+ * document is fetched as text, given a `<base>` pointing at the CDN so its own
+ * relative CSS/JS/images resolve, and rendered inside a sandboxed iframe, so its
+ * scripts cannot reach this site's DOM, storage or cookies.
  *
- * `isolated` drops the panel and the toolbar and lets the frame run the full
- * height of the window, which is the whole point of the `?as=1` view: the
- * document, and only the document.
+ * With `?as=1` the preview is dropped and the file is *served*: the prepared
+ * document is written into this page, so the site owns nothing and the document
+ * is the page. No frame, no sandbox, and no rewriting of the file's own styling.
  */
 
 import { el } from '../lib/dom.js';
@@ -42,7 +42,14 @@ function rewriteRootRelative(doc, prefix) {
   }
 }
 
-function buildDocument(html, { baseHref, repoPrefix, rawPrefix, hash }) {
+/**
+ * Parse a repository document and point it at the CDN.
+ *
+ * Shared by both lives of the file: a previewed page and a served one need the
+ * same preparation, because both have to resolve the repository's own relative
+ * assets from a URL that is not where the repository actually lives.
+ */
+function prepareDocument(html, { baseHref, repoPrefix }) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
 
   for (const existing of doc.querySelectorAll('base')) existing.remove();
@@ -54,6 +61,17 @@ function buildDocument(html, { baseHref, repoPrefix, rawPrefix, hash }) {
   const base = doc.createElement('base');
   base.setAttribute('href', baseHref);
   doc.head.prepend(base);
+
+  return doc;
+}
+
+function serialize(doc) {
+  return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
+}
+
+/** The preview document: prepared, then wired to the host page by the bridge. */
+function buildDocument(html, { baseHref, repoPrefix, rawPrefix, hash }) {
+  const doc = prepareDocument(html, { baseHref, repoPrefix });
 
   const bridge = doc.createElement('script');
   bridge.textContent = bridgeSource({
@@ -69,10 +87,37 @@ function buildDocument(html, { baseHref, repoPrefix, rawPrefix, hash }) {
   style.textContent = ':root{color-scheme:light}html{background:#fff}body{min-height:100%}';
   doc.head.append(style);
 
-  return `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
+  return serialize(doc);
 }
 
-export async function renderPage({ mount, repo, manifest, path, hash, navigate, isolated = false }) {
+/**
+ * Serve the file as the page.
+ *
+ * `?as=1` asks for the document itself rather than a picture of it, so it is
+ * written over this one: no frame, no sandbox, no bridge. The site stops
+ * listening first, because from here the links, the title and the history all
+ * belong to the document and not to the router.
+ *
+ * The served document keeps the `<base>` and the root relative rewriting, which
+ * is the one concession the site still makes: without it a page that assumes
+ * it lives at the domain root would resolve `/style.css` against this site and
+ * find nothing.
+ */
+function serveDocument({ html, baseHref, repoPrefix, stop }) {
+  const doc = prepareDocument(html, { baseHref, repoPrefix });
+  const markup = serialize(doc);
+
+  stop();
+
+  document.open();
+  document.write(markup);
+  document.close();
+}
+
+/** Nothing to render into: the document has replaced the page. */
+const SERVED = () => el('span', { class: 'sr-only' });
+
+export async function renderPage({ mount, repo, manifest, path, hash, navigate, isolated = false, stop }) {
   const { tooBig, text, url } = await readFile(manifest, path, { maxBytes: CONFIG.limits.textPreviewBytes });
 
   if (tooBig) {
@@ -86,6 +131,15 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate, 
   const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
   const baseHref = cdnDirUrl(manifest.repo, manifest.branch, dir);
   const repoPrefix = cdnDirUrl(manifest.repo, manifest.branch, '');
+
+  if (isolated) {
+    // Served rather than previewed. Past this point the document is the page,
+    // so there is no frame to size, no bridge to post to and no outlet left to
+    // render into.
+    serveDocument({ html: text, baseHref, repoPrefix, stop });
+    return SERVED();
+  }
+
   const rawPrefix = rawDirUrl(manifest.repo, manifest.branch, '');
 
   const frame = el('iframe', {
@@ -104,13 +158,10 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate, 
     if (event.source !== frame.contentWindow) return;
 
     if (data.type === 'height') {
-      // In the panel the frame is a scrollable slab of a fixed shape; isolated,
-      // it grows to whatever the document needs and the window does the
-      // scrolling.
+      // The frame is a scrollable slab of a fixed shape; the document is free
+      // to be as tall as it needs and the window does the scrolling.
       const measured = Math.max(Number(data.payload) || 0, 1);
-      const height = isolated
-        ? measured
-        : Math.min(Math.max(measured, CONFIG.preview.minHeight), CONFIG.preview.maxHeight);
+      const height = Math.min(Math.max(measured, CONFIG.preview.minHeight), CONFIG.preview.maxHeight);
       frame.style.height = `${height}px`;
     } else if (data.type === 'ready') {
       status.textContent = t('common.ready');
@@ -122,8 +173,6 @@ export async function renderPage({ mount, repo, manifest, path, hash, navigate, 
   });
 
   frame.srcdoc = buildDocument(text, { baseHref, repoPrefix, rawPrefix, hash });
-
-  if (isolated) return el('div', { class: 'isolated isolated-frame' }, frame);
 
   return el('section', { class: 'panel panel-preview' },
     el('div', { class: 'preview-toolbar' },
