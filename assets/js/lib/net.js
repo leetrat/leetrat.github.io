@@ -1,12 +1,16 @@
 /**
- * Network layer: typed errors, plus a small localStorage cache so a repeat view
- * does not spend another request.
+ * Network layer: typed errors, and nothing else.
  *
  * The CDN sends `Access-Control-Allow-Origin: *`, which is what lets a browser
  * on this origin fetch repository bytes at all.
+ *
+ * There is no cache. A remembered value looked harmless and was not: a branch
+ * pinned by one `?branch=` request outlived every later request that did not
+ * carry the flag, so the same URL served a different branch depending on what
+ * the browser had been shown before. Anything cached here has to be invisible
+ * in the URL to be a cache, and this site's whole contract is that the URL says
+ * what you get. Everything is fetched fresh.
  */
-
-const CACHE_PREFIX = 'leetrat:v1:';
 
 export class HttpError extends Error {
   constructor(kind, message, extra = {}) {
@@ -89,25 +93,6 @@ async function request(url) {
   return response;
 }
 
-function readCache(key) {
-  try {
-    const raw = localStorage.getItem(CACHE_PREFIX + key);
-    if (!raw) return null;
-    const entry = JSON.parse(raw);
-    return entry && typeof entry.at === 'number' ? entry : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(key, data) {
-  try {
-    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify({ at: Date.now(), data }));
-  } catch {
-    /* quota exceeded or storage disabled: caching is best effort */
-  }
-}
-
 /** Decode a body using the charset advertised by the response. */
 function decode(buffer, contentType) {
   const charset = /charset=["']?([\w-]+)/i.exec(contentType || '')?.[1];
@@ -174,15 +159,4 @@ export async function getText(url, { maxBytes = Infinity } = {}) {
     url: response.url,
     contentType,
   };
-}
-
-/** A remembered value that never expires on its own. */
-export function readPersistent(key) {
-  const entry = readCache(`persistent:${key}`);
-  return entry ? entry.data : null;
-}
-
-export function writePersistent(key, value) {
-  writeCache(`persistent:${key}`, value);
-  return value;
 }

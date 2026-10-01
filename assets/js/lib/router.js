@@ -77,9 +77,24 @@ export function wantedBranch(url) {
   return BRANCH_SOURCE.test(value) ? value : null;
 }
 
-/** Add the branch flag to a site URL. Omitted when there is nothing to add. */
-export function withBranch(href, branch) {
-  return branch ? `${href}?${BRANCH_PARAM}=${encodeURIComponent(branch)}` : href;
+/**
+ * Query flag asking for a file's bytes as text: `/v/repo/REPORT.md?raw=1`.
+ *
+ * The flag describes how to *show* a file, not which file: it names the same path
+ * and the same branch, and changes nothing about what is fetched. It is a query
+ * flag for the same reason `?branch=` is — it can never shadow a real file name,
+ * and it can be pasted into a message to mean "the source, please".
+ *
+ * Present and `1` is the only spelling that counts. Anything else is ignored
+ * rather than guessed at, so `?raw` in a link someone wrote by hand does not
+ * silently do nothing: `?raw=0` and `?raw=false` are explicit opt-outs, and any
+ * other value is not a request this site acts on.
+ */
+export const RAW_PARAM = 'raw';
+
+/** Whether a URL asks to see a file as text rather than rendered. */
+export function wantedRaw(url) {
+  return url?.searchParams?.get(RAW_PARAM) === '1';
 }
 
 /** The mount that claims a path: the longest prefix that matches it. */
@@ -148,20 +163,6 @@ export function resolve(pathname, config = CONFIG) {
   if (redirect) return { view: 'retired', redirect, path };
 
   return { view: 'error', reason: 'no-mount', path };
-}
-
-/** Build a site absolute URL inside a mount, URL-encoding each segment. */
-export function mountPath(mount, ...segments) {
-  const parts = [normalizePath(mount.prefix).replace(/^\/|\/$/g, ''), ...segments]
-    .filter((segment) => segment !== '' && segment !== null && segment !== undefined)
-    .map((segment) => encodeURIComponent(String(segment)).replace(/%2F/g, '/'));
-
-  return `/${parts.join('/')}`;
-}
-
-/** A URL for one repository, optionally pinned to a branch. */
-export function sitePath(mount, repo, path = '', branch = null) {
-  return withBranch(mountPath(mount, repo, path), branch);
 }
 
 /**

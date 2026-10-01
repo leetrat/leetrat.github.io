@@ -31,47 +31,36 @@
  * does, not something the URL asks for.
  */
 
-import { CONFIG } from '../config.js';
 import { readFile } from '../lib/github.js';
 import { isHtml, isMarkdown, hasExtension } from '../lib/format.js';
 import { entryFor, branchFor, overridesFor } from '../lib/router.js';
-import { readPersistent, writePersistent } from '../lib/net.js';
+import { CONFIG } from '../config.js';
 import { t } from '../lib/i18n.js';
 import { renderEmpty } from './error.js';
 import { serveDocument, serveRaw, renderTooLarge } from './page.js';
-import { renderMarkdownFile } from './file.js';
+import { renderMarkdownFile, renderPlaintext } from './file.js';
 
 /**
  * Which branch to serve from.
  *
- * Precedence, highest first:
+ * `?branch=` when the URL carries it, and the branch config declares otherwise.
+ * That is the whole rule, and the URL is always the source of truth.
  *
- *   1. `?branch=` — the URL is the source of truth. Passing the flag explicitly
- *      wins, including when it names the configured branch, which is how a reader
- *      gets back onto the main line.
- *   2. Whatever was last passed in this browser for this repository. A branch
- *      override sticks, so a link shared in chat keeps working after it has been
- *      followed once and then navigated around from.
- *   3. The branch config declares.
- *
- * The cost of (2) is that editing a site's branch in config does not reach a
- * browser that has already pinned one. That is the trade for a branch override
- * surviving navigation; `?branch=main` always undoes it.
+ * There used to be a third step: a branch seen earlier in this browser was
+ * remembered and preferred over the configured one, so that a `?branch=dev` link
+ * kept working after being followed and navigated around from. It was removed
+ * because it made the same URL mean different things to different readers — the
+ * bare `/v/itmo-web` showed `main` until one visit pinned `dev`, and then showed
+ * `dev` forever after, with no way back short of typing `?branch=main`. State
+ * the URL cannot show is state this site has no business keeping.
  */
-function resolveBranch(repo, wanted) {
-  const remembered = readPersistent(`branch:${CONFIG.owner}/${repo}`);
-
-  if (wanted) {
-    writePersistent(`branch:${CONFIG.owner}/${repo}`, wanted);
-    return wanted;
-  }
-
-  return remembered || branchFor(overridesFor(repo));
+function resolveBranch(overrides, wanted) {
+  return wanted || branchFor(overrides);
 }
 
-export async function renderSite({ mount, repo, path, branch: wanted }, { stop }) {
+export async function renderSite({ mount, repo, path, branch: wanted, raw: wantRaw }, { stop }) {
   const overrides = overridesFor(repo);
-  const branch = resolveBranch(repo, wanted);
+  const branch = resolveBranch(overrides, wanted);
   const requested = path || entryFor(overrides, mount);
 
   // A path with no extension names a directory, and a directory on the web is its
@@ -85,7 +74,6 @@ export async function renderSite({ mount, repo, path, branch: wanted }, { stop }
   // file really is in, which for a directory URL is the directory, not the
   // `index.html` we appended to fetch it.
   const base = hasExtension(requested) ? requested : `${requested}/`;
-  const pinned = branch === branchFor(overrides) ? null : branch;
 
   let result = null;
   try {
@@ -115,6 +103,21 @@ export async function renderSite({ mount, repo, path, branch: wanted }, { stop }
 
   if (result.tooBig) return renderTooLarge(result.size, result.url);
 
+  // `?raw=1` asks for the file as stored, whatever it is. It is answered before
+  // anything decides what the file *is*, so it works for a markdown report and an
+  // HTML page alike — the point of the flag is to see the source, so parsing it
+  // would defeat the request.
+  //
+  // The bytes are already in hand: the size limit above has passed, and the text
+  // check below is what would have redirected. This renders what was fetched
+  // rather than navigating to the CDN, which is the one thing the flag does not
+  // do — the reader asked for the plaintext, and the plaintext is what they get,
+  // still on this page.
+  if (wantRaw) {
+    if (result.notText) return serveRaw(result.url);
+    return renderPlaintext(result.text, { path: requested, branch });
+  }
+
   // Anything this site cannot typeset — an image, a video, a PDF — is not a
   // failure, it is a file the browser renders better than this site could. It is
   // served raw, from the CDN, with the real content type.
@@ -124,8 +127,16 @@ export async function renderSite({ mount, repo, path, branch: wanted }, { stop }
     return serveDocument(result.text, { repo, branch, path: base, stop });
   }
 
+  // A markdown file is parsed and nothing else: no route rewriting, no branch
+  // pinning, no rewriting of its links into site URLs. A reader who opened
+  // `/v/itmo-oomd/README.md` opened a *file*, and it should read like the file.
+  //
+  // The one exception is unavoidable: the markdown renderer's own link safety
+  // still applies, so `javascript:` and `data:` hrefs degrade to their text. That
+  // is not navigation, it is refusing to build a link that would run code on this
+  // origin.
   if (isMarkdown(file)) {
-    return renderMarkdownFile({ mount, repo, branch, path: base, pin: pinned, text: result.text });
+    return renderMarkdownFile({ text: result.text });
   }
 
   // Text that is not a document: JSON, YAML, source, a `.txt` note. There is no

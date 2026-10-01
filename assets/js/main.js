@@ -11,7 +11,7 @@
  */
 
 import { CONFIG, validateConfig } from './config.js';
-import { resolve, wantedBranch } from './lib/router.js';
+import { resolve, wantedBranch, wantedRaw } from './lib/router.js';
 import { createNavigator } from './lib/nav.js';
 import { spinner, clear, el } from './lib/dom.js';
 import { t, translateValue, onLanguageChange } from './lib/i18n.js';
@@ -123,6 +123,7 @@ function currentRoute(url = new URL(location.href)) {
   const route = resolve(url.pathname, CONFIG);
   route.hash = url.hash;
   route.branch = wantedBranch(url);
+  route.raw = wantedRaw(url);
   return route;
 }
 
@@ -135,12 +136,17 @@ const navigator = createNavigator({
 /**
  * Navigate client side.
  *
- * The branch flag is carried over: a markdown document read from a side branch
- * links onward to routes that have to stay on that branch.
+ * No view calls this any more — a rendered document's links are the document's
+ * own hrefs now, so nothing needs rewriting them into routes. It stays because it
+ * is the one place a query flag would have to be carried across a client-side
+ * navigation, and the router is the only thing that knows how to do that without
+ * reloading the page.
  */
-function navigate(path, hash = '', branch = null) {
+function navigate(path, hash = '', params = {}) {
   const url = new URL(path, location.origin);
-  if (branch) url.searchParams.set('branch', branch);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+  }
   url.hash = hash || '';
   navigator.go(`${url.pathname}${url.search}${url.hash}`);
 }

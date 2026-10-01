@@ -250,6 +250,14 @@ h1, h2, h3 { line-height: 1.25; margin: 0 0 0.5em; }
   font-size: 0.85em;
 }
 
+/* Raw view (`?raw=1`): the file as stored, named above the text. */
+
+.doc-raw-caption {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .md-pre {
   margin: 1em 0;
   padding: 0.9rem 1rem;
