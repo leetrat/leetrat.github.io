@@ -126,25 +126,84 @@ export function isTextual(contentType) {
   ].includes(type);
 }
 
-/** Fetch text, optionally refusing to read bodies past `maxBytes`. */
-export async function getText(url, { maxBytes = Infinity } = {}) {
+/**
+ * How a browser can *show* a non-text file, or `null` if it cannot show one.
+ *
+ * Separate from `isTextual` on purpose. The question they answer is not the same:
+ * a font, an archive and a `.wasm` are all binary and none of them can be looked
+ * at, while an image is binary and is exactly the thing a reader opened the URL
+ * to see. Deciding what to download with the wrong one of those two questions is
+ * how a 4 MB GIF ends up offered as a download instead of a picture.
+ *
+ * SVG is here rather than in the text branch even though it is XML, because a
+ * reader asking for `logo.svg` asked for the drawing.
+ */
+export function mediaKind(contentType) {
+  const type = String(contentType || '').split(';')[0].trim().toLowerCase();
+
+  if (type === 'image/svg+xml') return 'svg';
+  if (type.startsWith('image/')) return 'image';
+  if (type.startsWith('video/')) return 'video';
+  if (type.startsWith('audio/')) return 'audio';
+  if (type === 'application/pdf') return 'pdf';
+
+  return null;
+}
+
+/**
+ * Fetch a file, reading it as text when it is text and never reading it otherwise.
+ *
+ * `headersOnly` asks for the response and nothing else. It is what `?raw=1` uses:
+ * the flag means "give me the endpoint", so the bytes are about to be fetched by
+ * whatever follows the redirect, and reading them here to find that out would
+ * download a file twice and refuse it for being large on the way past. The status is
+ * still read, because a 404 has to say so here rather than at the CDN.
+ *
+ * A non-text file is described by its headers and given a `load()` the caller may
+ * use if it turns out the browser should be *shown* it. The response body is not
+ * cancelled in that case, so showing a 3 MB PNG costs one request rather than two:
+ * the earlier version handed back `{ notText: true }` and the view that then wanted
+ * to display the image had to ask for the bytes all over again.
+ *
+ * `maxBytes` bounds text and `maxMediaBytes` bounds what will be displayed. They
+ * differ by two orders of magnitude on purpose: typesetting 256 KB of markdown is
+ * instant and a 40 MB video decoded into an object URL is a tab the reader cannot
+ * close politely. Which limit applies is decided by the content type, not by the
+ * order the checks happen to run in — checking the text limit first meant a large
+ * image was refused as "too large to show" when the file is precisely what the
+ * reader came for.
+ */
+export async function getText(url, { maxBytes = Infinity, maxMediaBytes = Infinity, headersOnly = false } = {}) {
   const response = await request(url);
   if (!response.ok) throw await toHttpError(response);
 
   const declared = Number(response.headers.get('content-length') || 0);
   const contentType = response.headers.get('content-type') || '';
 
-  if (declared && declared > maxBytes) {
+  if (headersOnly) {
+    response.body?.cancel();
+    return { headersOnly: true, size: declared, url: response.url, contentType };
+  }
+
+  const textual = isTextual(contentType);
+  const limit = textual ? maxBytes : maxMediaBytes;
+
+  if (declared && declared > limit) {
     response.body?.cancel();
     return { tooBig: true, size: declared, url: response.url, contentType };
   }
 
-  // A binary file is not going to be typeset, so it is handed to the browser by URL
-  // rather than downloaded here. The status has already told us it exists, which is
-  // all the caller needs to decide that.
-  if (!isTextual(contentType)) {
-    response.body?.cancel();
-    return { notText: true, contentType, size: declared, url: response.url };
+  if (!textual) {
+    return {
+      notText: true,
+      contentType,
+      size: declared,
+      url: response.url,
+      // Deferred rather than read: a font or an archive is never displayed, and
+      // reading its bytes to find that out would download the whole repository's
+      // binaries to answer a question the headers already answered.
+      load: () => response.blob(),
+    };
   }
 
   const buffer = await response.arrayBuffer();

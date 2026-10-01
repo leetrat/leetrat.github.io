@@ -20,10 +20,16 @@
  * stops short, and it stops at the root: every file below it is still reachable
  * by path.
  *
- * HTML is written over the page (see `page.js`). Markdown is typeset into it.
- * Everything else is served raw, because the browser renders an image, a video or
- * a PDF better than this site could, and the CDN already serves it with the right
- * content type.
+ * HTML is written over the page (see `page.js`). Markdown is typeset into it. An
+ * image, a video, an audio file or a PDF is displayed into it, and everything else
+ * textual — a `.js`, a `.css`, a `.json`, a `LICENSE` — is framed as plaintext on
+ * it. Those all keep the header and the back button, which is the point: a reader
+ * who opened `/v/leetrat/assets/nodders.gif` or `/v/itmo-web/style.css` asked for a
+ * file on this site, and navigating to the CDN to show it took the site away from
+ * them to do it.
+ *
+ * Two things still leave: `?raw=1`, which means the endpoint itself and redirects
+ * there, and bytes nothing can show — a font, an archive, a `.wasm`.
  *
  * Signature is `(route, context)`, like every view: the route carries what the URL
  * said, the context carries what the application can do. `stop` lives in the
@@ -32,21 +38,23 @@
  */
 
 import { readFile } from '../lib/github.js';
+import { mediaKind } from '../lib/net.js';
 import { isHtml, isMarkdown, hasExtension } from '../lib/format.js';
-import { entryFor, branchFor, overridesFor } from '../lib/router.js';
+import { entryFor, overridesFor, branchCandidates, branchLabel } from '../lib/router.js';
 import { CONFIG } from '../config.js';
 import { t } from '../lib/i18n.js';
 import { renderEmpty } from './error.js';
 import { serveDocument, serveRaw, renderTooLarge } from './page.js';
-import { renderMarkdownFile, renderPlaintext } from './file.js';
+import { renderMarkdownFile, renderMedia, renderPlaintext } from './file.js';
 
 /**
- * Which branch to serve from.
+ * Which branches to try, and what to say when none of them have the file.
  *
- * `?branch=` when the URL carries it, and the branch config declares otherwise.
- * That is the whole rule, and the URL is always the source of truth.
+ * With no `?branch=` flag, the site is choosing and chooses between `main` and
+ * `master` — see `branchCandidates`. With the flag, only the named branch is
+ * tried, because the flag is a claim about what that URL means.
  *
- * There used to be a third step: a branch seen earlier in this browser was
+ * There used to be a third source: a branch seen earlier in this browser was
  * remembered and preferred over the configured one, so that a `?branch=dev` link
  * kept working after being followed and navigated around from. It was removed
  * because it made the same URL mean different things to different readers — the
@@ -54,13 +62,35 @@ import { renderMarkdownFile, renderPlaintext } from './file.js';
  * `dev` forever after, with no way back short of typing `?branch=main`. State
  * the URL cannot show is state this site has no business keeping.
  */
-function resolveBranch(overrides, wanted) {
-  return wanted || branchFor(overrides);
+
+/**
+ * Read a file from the first branch that has it.
+ *
+ * Returns the result *and* the branch it came from, because the branch is part of
+ * the answer: the same bytes served from `main` and from a fallback are two
+ * different pages as far as the URL, the caption and the error messages are
+ * concerned.
+ */
+async function readFromFirst(repo, branches, file, options) {
+  let missing = null;
+
+  for (const branch of branches) {
+    try {
+      return { branch, result: await readFile(repo, branch, file, options) };
+    } catch (error) {
+      // Only a 404 moves on. A rate limit, an offline browser or a CDN error is
+      // the answer for *every* branch, and retrying them just spends requests.
+      if (error?.kind !== 'not-found') throw error;
+      missing = error;
+    }
+  }
+
+  throw missing;
 }
 
 export async function renderSite({ mount, repo, path, branch: wanted, raw: wantRaw }, { stop }) {
   const overrides = overridesFor(repo);
-  const branch = resolveBranch(overrides, wanted);
+  const branches = branchCandidates(overrides, wanted);
   const requested = path || entryFor(overrides, mount);
 
   // A path with no extension names a directory, and a directory on the web is its
@@ -68,63 +98,132 @@ export async function renderSite({ mount, repo, path, branch: wanted, raw: wantR
   // applied up front, not a search — the file is derived from the path, never
   // probed for. It is also why a repository with several `index.html` files works
   // without any listing: each one is simply reachable at its own directory URL.
-  const file = hasExtension(requested) ? requested : `${requested}/index.html`;
+  //
+  // Whether the URL named a file or a directory decides what a 404 means, so it is
+  // recorded before the name is rewritten. `/v/leetrat/assets` and
+  // `/v/leetrat/assets/nodders.gif` both fail, and they are different failures:
+  // the first has no page to show, the second is a missing file.
+  //
+  // A bare `/v/<repo>` is `noEntry` too, and for a different reason to a
+  // directory: nothing named a file there at all, it assumed one. Testing `path`
+  // rather than the derived entry keeps that case out of `notFound`, which would
+  // otherwise claim `index.html` was named by the URL when it was not.
+  const bare = !path;
+  const namedFile = !bare && hasExtension(requested);
+
+  // The directory rule applies to what the *URL* named, so a bare repository is
+  // exempt: its `requested` is already the entry file, and appending to it would
+  // ask for `index.html/index.html`.
+  const file = !bare && !namedFile ? `${requested}/index.html` : requested;
 
   // Relative links inside the document have to resolve against the directory the
   // file really is in, which for a directory URL is the directory, not the
   // `index.html` we appended to fetch it.
-  const base = hasExtension(requested) ? requested : `${requested}/`;
+  const base = namedFile ? requested : `${requested}/`;
 
+  let branch = branches[0];
   let result = null;
+
   try {
-    result = await readFile(repo, branch, file, { maxBytes: CONFIG.limits.textPreviewBytes });
+    ({ branch, result } = await readFromFirst(repo, branches, file, {
+      maxBytes: CONFIG.limits.textPreviewBytes,
+      maxMediaBytes: CONFIG.limits.mediaPreviewBytes,
+      // `?raw=1` is answered by the endpoint, so its bytes are never needed here.
+      // Only the status is: a 404 has to be reported by this site, not discovered
+      // by the reader at the CDN.
+      headersOnly: wantRaw,
+    }));
   } catch (error) {
     if (error?.kind !== 'not-found') throw error;
 
-    // A bare `/v/<repo>` already assumed the entry file: it asked for the root
-    // index.html and that is what came back 404. Saying "not found" here would
-    // be wrong in a way that matters — the repository exists and is reachable,
-    // it just is not a site. That is a different answer, so it gets its own panel.
-    if (!path) {
+    const where = branchLabel(branches);
+
+    // A 404 on a URL that did not name a file means the thing the URL named has no
+    // page to show: the repository root has no `index.html`, or the directory does
+    // not. Both are `noEntry` — "this is not a site", which is one fact about the
+    // same kind of path, and `leetrat/assets` is as much an example of it as a
+    // bare `/v/itmo-oomd` is.
+    //
+    // What this must *not* say is "does not exist". `leetrat/assets` exists, and
+    // holds four images; reporting a real directory as missing is plainly false,
+    // and it hides why the URL failed.
+    if (!namedFile) {
+      // Name the repository or the directory the URL named, never the entry file
+      // derived from it: "itmo-oomd/index.html doesn't provide an HTML page" is a
+      // sentence about the guess, not about the URL the reader asked for.
       return renderEmpty(
         t('site.noEntry.title'),
-        t('site.noEntry.hint', { path: `${CONFIG.owner}/${repo}` }),
+        t('site.noEntry.hint', { path: path ? `${repo}/${requested}` : repo }),
       );
     }
 
     // Otherwise the URL named a file, and that is what is missing. Report the path
-    // that was asked for, not the file derived from it: `/v/itmo-web/lab_1` failing
-    // should not read as `lab_1/index.html` missing.
+    // that was asked for, not the file derived from it, and name every branch that
+    // was consulted so a 404 on `main or master` does not read as certainty.
     return renderEmpty(
       t('site.notFound.title'),
-      t('site.notFound.hint', { path: `${repo}/${requested}`, branch }),
+      t('site.notFound.hint', { path: `${repo}/${requested}`, branch: where }),
     );
   }
 
+  // `?raw=1` means the endpoint itself: hand the window to the CDN URL, whatever the
+  // file is. A stylesheet, a PNG, an HTML page and a README all get the same answer,
+  // and `curl -L` on any of them returns the file's own bytes. This used to mean
+  // "show me the source on this page", which made it indistinguishable from the
+  // default view and left no way to ask for the file itself.
+  if (result.headersOnly) return serveRaw(result.url);
+
   if (result.tooBig) return renderTooLarge(result.size, result.url);
 
-  // `?raw=1` asks for the file as stored, whatever it is. It is answered before
-  // anything decides what the file *is*, so it works for a markdown report and an
-  // HTML page alike — the point of the flag is to see the source, so parsing it
-  // would defeat the request.
-  //
-  // The bytes are already in hand: the size limit above has passed, and the text
-  // check below is what would have redirected. This renders what was fetched
-  // rather than navigating to the CDN, which is the one thing the flag does not
-  // do — the reader asked for the plaintext, and the plaintext is what they get,
-  // still on this page.
-  if (wantRaw) {
-    if (result.notText) return serveRaw(result.url);
-    return renderPlaintext(result.text, { path: requested, branch });
-  }
+  // Anything this site cannot typeset — an image, a video, a PDF — used to be
+  // navigated away to the CDN. That made `/v/leetrat/assets/nodders.gif` leave the
+  // site entirely, and taking the header with it, to show a file the browser shows
+  // perfectly well inside a page. It is displayed here instead, the same as a
+  // markdown file, and only genuinely undisplayable bytes (a font, an archive) are
+  // still handed over.
+  if (result.notText) {
+    const kind = mediaKind(result.contentType);
 
-  // Anything this site cannot typeset — an image, a video, a PDF — is not a
-  // failure, it is a file the browser renders better than this site could. It is
-  // served raw, from the CDN, with the real content type.
-  if (result.notText) return serveRaw(result.url);
+    if (!kind) return serveRaw(result.url);
+
+    const blob = await result.load();
+
+    // The declared length is a CDN header and can lie about a gzip-encoded body, so
+    // the limit is checked against the bytes as well. Past it, a link is the honest
+    // answer: a reader who asked for a 200 MB video still gets one click from it.
+    if (blob.size > CONFIG.limits.mediaPreviewBytes) {
+      return renderTooLarge(blob.size, result.url);
+    }
+
+    return renderMedia({
+      kind,
+      blob,
+      url: result.url,
+      size: blob.size,
+      path: requested,
+      branch,
+    });
+  }
 
   if (isHtml(file)) {
     return serveDocument(result.text, { repo, branch, path: base, stop });
+  }
+
+  // An SVG arrives as text — it is XML, and `isTextual` is right about that — but a
+  // reader who opened `logo.svg` asked for the drawing, not the markup. It is
+  // re-wrapped as a blob of its own declared type and displayed like any other
+  // image.
+  if (mediaKind(result.contentType) === 'svg') {
+    const blob = new Blob([result.text], { type: result.contentType });
+
+    return renderMedia({
+      kind: 'svg',
+      blob,
+      url: result.url,
+      size: blob.size,
+      path: requested,
+      branch,
+    });
   }
 
   // A markdown file is parsed and nothing else: no route rewriting, no branch
@@ -136,11 +235,18 @@ export async function renderSite({ mount, repo, path, branch: wanted, raw: wantR
   // is not navigation, it is refusing to build a link that would run code on this
   // origin.
   if (isMarkdown(file)) {
-    return renderMarkdownFile({ text: result.text });
+    // Images in a markdown file are resolved against the CDN directory it came
+    // from; links are not rewritten. See `imageBase` in file.js for why those two
+    // are treated differently.
+    const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/') + 1) : '';
+    return renderMarkdownFile({ text: result.text, repo, branch, dir });
   }
 
-  // Text that is not a document: JSON, YAML, source, a `.txt` note. There is no
-  // renderer for these and none is needed — showing the text is the whole request,
-  // and the browser's own plain-text view is the honest way to show it.
-  return serveRaw(result.url);
+  // Text that is not a document: a `.js`, a `.css`, JSON, YAML, a `.txt` note, a
+  // `LICENSE`. These used to be handed to the CDN as well, which meant
+  // `/v/itmo-web/style.css` left the site to show a stylesheet. There is no renderer
+  // for source and none is needed — framing the text *is* the whole request, and it
+  // is the same view `?raw=1` used to produce, now reached by simply not asking for
+  // the endpoint.
+  return renderPlaintext(result.text, { path: requested, branch, size: result.size });
 }

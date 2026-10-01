@@ -34,10 +34,12 @@ const STRINGS = {
     'common.loading': 'Loading…',
     'common.openRaw': 'Open raw file',
 
+    'site.media.alt': '{path}, shown from {branch}',
+    'site.media.pdfFallback': 'This browser will not show a PDF here.',
 
     'site.noEntry.title': 'No site here',
     'site.noEntry.hint':
-      '{path} has no index.html at its root, so there is nothing to show here. Any file inside it is still reachable by its path.',
+      '{path} doesn\'t provide an HTML page.',
     'site.notFound.title': 'Not found',
     'site.notFound.hint': '{path} does not exist on {branch}.',
     'site.tooLarge.title': 'File too large to show',
@@ -76,12 +78,14 @@ const STRINGS = {
     'common.loading': 'Загрузка…',
     'common.openRaw': 'Открыть исходный файл',
 
+    'site.media.alt': '{path}, показан из {branch}',
+    'site.media.pdfFallback': 'Этот браузер не покажет здесь PDF.',
 
     'site.noEntry.title': 'Здесь нет сайта',
     'site.noEntry.hint':
-      'В корне {path} нет index.html, поэтому здесь показать нечего. Любой файл внутри всё равно доступен по пути.',
+      '{path} не предоставляет HTML-страницу.',
     'site.notFound.title': 'Не найдено',
-    'site.notFound.hint': '{path} не существует в ветке {branch}.',
+    'site.notFound.hint': '{path} не существует в ветках {branch}.',
     'site.tooLarge.title': 'Файл слишком большой',
     'site.tooLarge.hint': '{size} — больше, чем этот сайт показывает.',
 

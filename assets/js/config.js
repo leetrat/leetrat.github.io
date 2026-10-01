@@ -85,7 +85,9 @@ export const CONFIG = {
    *   { name: 'itmo-web', branch: 'main', entry: 'lab_1/index.html' }
    *
    *   name   the repository, required
-   *   branch the branch to serve from, defaults to 'main'
+   *   branch the branch to serve from, defaults to 'main'. Without a `?branch=`
+   *   flag a repository is tried on `main` and then on `master` — see
+   *   `branchCandidates` in `router.js`
    *   entry  the file that *is* the site, defaults to the mount's `entry`
    *
    * This is an override table, not an allowlist. Any repository under `owner` is
@@ -135,6 +137,13 @@ export const CONFIG = {
   limits: {
     /** Files larger than this are shown as a link instead of being rendered. */
     textPreviewBytes: 256 * 1024,
+    /**
+     * The same, for a file that is displayed rather than typeset. Higher, because
+     * rendering an image or a video is the request and refusing it would be a
+     * worse answer than a slow load; low enough that an accidentally opened video
+     * is not a few hundred megabytes of object URL the reader has to close.
+     */
+    mediaPreviewBytes: 32 * 1024 * 1024,
   },
 };
 

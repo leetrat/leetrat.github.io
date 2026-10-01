@@ -19,6 +19,7 @@ import { renderHome } from './views/home.js';
 import { renderSite } from './views/site.js';
 import { renderError } from './views/error.js';
 import { renderLanguageSwitcher } from './views/language-switcher.js';
+import { releaseMedia } from './views/file.js';
 
 /** Route view name -> renderer. Replace an entry to swap an implementation. */
 export const VIEWS = {
@@ -91,6 +92,11 @@ function setChrome(route) {
 /** Render a route. Returns the promise so callers can await a settled view. */
 export async function renderRoute(route) {
   const view = VIEWS[route.view] || VIEWS.error;
+
+  // Before the outlet is emptied: a displayed image holds an object URL, and nothing
+  // revokes one automatically, so every route would otherwise leak the previous
+  // page's file.
+  releaseMedia();
 
   setChrome(route);
   clear(outlet).append(spinner(t('common.loading')));

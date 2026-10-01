@@ -250,13 +250,91 @@ h1, h2, h3 { line-height: 1.25; margin: 0 0 0.5em; }
   font-size: 0.85em;
 }
 
-/* Raw view (`?raw=1`): the file as stored, named above the text. */
+/* Text shown as text (`views/file.js`)
+ *
+ * A `.js`, a `.css`, a `LICENSE` — framed here rather than handed to the CDN. The
+ * measure is the same as a markdown file's, because both are documents being read
+ * rather than an image being looked at, and the caption names the file, the branch
+ * and the size: this view is usually reached by editing a URL, and there is no other
+ * way to confirm which bytes are on screen.
+ */
 
-.doc-raw-caption {
+.doc-text {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 4rem) var(--gutter);
+}
+
+.doc-text-caption {
   margin: 0 0 0.6rem;
-  color: var(--muted);
+  color: var(--fg-muted);
+  font-size: 0.85rem;
   overflow-wrap: anywhere;
 }
+
+/* Displayed media (`views/file.js`)
+ *
+ * An image, a video, a PDF shown inside the page rather than handed to the CDN.
+ * The checkerboard is what a transparent PNG needs to be judged against: on the
+ * page's own background, a logo with transparency and a logo that is empty are
+ * indistinguishable, and the reader cannot tell which they are looking at.
+ */
+.doc-media {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 4rem) var(--gutter);
+}
+
+.media-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-inset);
+  background-image:
+    linear-gradient(45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.media-video {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+}
+
+.media-audio { display: block; width: 100%; }
+
+/* Tall rather than wide: a PDF has pages, and one visible page at a useful size is
+ * more use than a scrolling letterbox. */
+.media-pdf {
+  display: block;
+  width: 100%;
+  height: 80vh;
+  min-height: 30rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+
+.media-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  align-items: baseline;
+  justify-content: center;
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.media-raw { color: var(--fg-muted); }
 
 .md-pre {
   margin: 1em 0;

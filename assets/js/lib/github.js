@@ -37,9 +37,18 @@ export function rawUrl(repo, branch, path) {
   return `${CONFIG.sources.raw}/${encodeURIComponent(OWNER)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${encodePath(path)}`;
 }
 
-/** A `<base href>`: the directory a document's relative URLs resolve against. */
+/**
+ * A `<base href>`: the directory a document's relative URLs resolve against.
+ *
+ * The trailing slash is load-bearing and used to be conditional on whether the
+ * caller already supplied one — which is backwards. `encodePath` drops empty
+ * segments, so a directory given as `lab_1/` comes back as `lab_1`, and a relative
+ * `href="a.html"` then resolves against the *parent*. Every caller passes either a
+ * directory or nothing, so the slash is simply always required.
+ */
 export function cdnDirUrl(repo, branch, dir = '') {
-  return `${cdnUrl(repo, branch, dir)}${dir && !dir.endsWith('/') ? '/' : ''}`;
+  const base = cdnUrl(repo, branch, dir);
+  return base.endsWith('/') ? base : `${base}/`;
 }
 
 /** A link to the file on GitHub itself. */

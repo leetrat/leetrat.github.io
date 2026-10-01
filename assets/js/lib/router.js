@@ -191,11 +191,41 @@ export function entryFor(overrides, mount, config = CONFIG) {
 }
 
 /**
- * The branch a repository is served from when nothing has been pinned.
+ * The branch a repository is served from when nothing has been asked for.
  *
- * `main`, because that is what these repositories use and because there is no
- * branch discovery to consult: `?branch=` is how any other branch is reached.
+ * `main`, because that is what most of these repositories use and because there is
+ * no branch discovery to consult: `?branch=` is how any other branch is reached.
  */
 export function branchFor(overrides) {
   return overrides?.branch || 'main';
+}
+
+/**
+ * The branch tried when `main` turns out to have nothing at that path.
+ *
+ * Git named the first branch `master` and renamed it later, and repositories
+ * created before that still use it — three of these owner's repositories
+ * (`itmo-info`, `itmo-prog-sem1`, `Potato`) have no `main` at all. Falling back
+ * to `master` means those are reachable without an override per repository, and
+ * costs one failed request only when `main` genuinely has nothing.
+ */
+export const FALLBACK_BRANCH = 'master';
+
+/**
+ * The branches to try, in order.
+ *
+ * A single entry when the URL asked for a branch: `?branch=` is a claim about
+ * what that URL means, so `?branch=main` returning a page from `master` would be
+ * the same class of lie as the removed branch cache — the URL would no longer say
+ * what you got. No flag means the site is choosing, and it may choose.
+ */
+export function branchCandidates(overrides, wanted) {
+  const branch = wanted || branchFor(overrides);
+  if (wanted) return [wanted];
+  return branch === FALLBACK_BRANCH ? [branch] : [branch, FALLBACK_BRANCH];
+}
+
+/** How a set of branches is named in a message: one name, or several. */
+export function branchLabel(branches) {
+  return branches.length > 1 ? branches.join(' / ') : branches[0];
 }
