@@ -43,12 +43,14 @@ import { isAbsolute, renderMarkdown } from '../lib/markdown.js';
  * navigation. `![](img/plot.png)` resolves against the page URL, which is this
  * site, and this site is not a file server — `/v/itmo-web/img/plot.png` is a 404
  * from the host. So a relative `src` is resolved against the CDN directory the file
- * came from and the image appears. Links are left alone: those are choices the
- * reader makes, and a link in a repository's README should mean what it means in
- * the repository.
+ * came from and the image appears. A link does not need this, because a broken link
+ * degrades to text the reader can read and act on, and a broken image is just a gap.
+ *
+ * The directory is addressed by `rev` — the commit the file was fetched at — so a
+ * document and the images inside it cannot come from two different revisions.
  */
-function imageBase(repo, branch, dir) {
-  return repo ? cdnDirUrl(repo, branch, dir) : null;
+function imageBase(repo, rev, dir) {
+  return repo ? cdnDirUrl(repo, rev, dir) : null;
 }
 
 /** Resolve an image `src` against the file's own location, leaving absolute ones. */
@@ -62,8 +64,8 @@ function resolveImage(src, base) {
 }
 
 /** A markdown file, parsed and rendered as a document with no panel around it. */
-export function renderMarkdownFile({ text, repo, branch, dir }) {
-  const base = imageBase(repo, branch, dir);
+export function renderMarkdownFile({ text, repo, rev, dir }) {
+  const base = imageBase(repo, rev, dir);
 
   return el('div', { class: 'doc doc-markdown' },
     renderMarkdown(text, base ? { imageUrl: (src) => resolveImage(src, base) } : undefined));

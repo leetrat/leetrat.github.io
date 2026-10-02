@@ -37,7 +37,7 @@
  * does, not something the URL asks for.
  */
 
-import { readFile } from '../lib/github.js';
+import { readFile, resolveRev } from '../lib/github.js';
 import { mediaKind } from '../lib/net.js';
 import { isHtml, isMarkdown, hasExtension } from '../lib/format.js';
 import { entryFor, overridesFor, branchCandidates, branchLabel } from '../lib/router.js';
@@ -66,17 +66,24 @@ import { renderMarkdownFile, renderMedia, renderPlaintext } from './file.js';
 /**
  * Read a file from the first branch that has it.
  *
- * Returns the result *and* the branch it came from, because the branch is part of
- * the answer: the same bytes served from `main` and from a fallback are two
- * different pages as far as the URL, the caption and the error messages are
- * concerned.
+ * Returns the result, the branch the reader asked for, *and* the commit it was
+ * fetched at — three different things, and keeping them apart is what lets the URL
+ * say `main` while the bytes are addressed by SHA. The caption says `main` because
+ * that is what was requested; the request says `<sha>` because that is what is
+ * addressable without a twelve-hour cache; and `site.notFound` can name every branch
+ * it consulted because none of them were guesses.
+ *
+ * A revision is resolved inside the loop rather than up front, so a file that is
+ * present on the first branch never spends a request on the second. That matters
+ * more than it looks: the lookup is GitHub's unauthenticated API, 60 an hour per IP.
  */
 async function readFromFirst(repo, branches, file, options) {
   let missing = null;
 
   for (const branch of branches) {
     try {
-      return { branch, result: await readFile(repo, branch, file, options) };
+      const rev = await resolveRev(repo, branch);
+      return { branch, rev, result: await readFile(repo, rev, file, options) };
     } catch (error) {
       // Only a 404 moves on. A rate limit, an offline browser or a CDN error is
       // the answer for *every* branch, and retrying them just spends requests.
@@ -122,10 +129,11 @@ export async function renderSite({ mount, repo, path, branch: wanted, raw: wantR
   const base = namedFile ? requested : `${requested}/`;
 
   let branch = branches[0];
+  let rev = branch;
   let result = null;
 
   try {
-    ({ branch, result } = await readFromFirst(repo, branches, file, {
+    ({ branch, rev, result } = await readFromFirst(repo, branches, file, {
       maxBytes: CONFIG.limits.textPreviewBytes,
       maxMediaBytes: CONFIG.limits.mediaPreviewBytes,
       // `?raw=1` is answered by the endpoint, so its bytes are never needed here.
@@ -206,7 +214,9 @@ export async function renderSite({ mount, repo, path, branch: wanted, raw: wantR
   }
 
   if (isHtml(file)) {
-    return serveDocument(result.text, { repo, branch, path: base, stop });
+    // `rev`, not `branch`: the `<base>` has to point at the same commit the document
+    // was fetched from, or its own relative assets resolve against a different one.
+    return serveDocument(result.text, { repo, rev, path: base, stop });
   }
 
   // An SVG arrives as text — it is XML, and `isTextual` is right about that — but a
@@ -235,11 +245,11 @@ export async function renderSite({ mount, repo, path, branch: wanted, raw: wantR
   // is not navigation, it is refusing to build a link that would run code on this
   // origin.
   if (isMarkdown(file)) {
-    // Images in a markdown file are resolved against the CDN directory it came
-    // from; links are not rewritten. See `imageBase` in file.js for why those two
-    // are treated differently.
+    // Images in a markdown file are resolved against the CDN directory the file came
+    // from, at the commit it came from. Links are not rewritten. See `imageBase` in
+    // file.js for why those two are treated differently.
     const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/') + 1) : '';
-    return renderMarkdownFile({ text: result.text, repo, branch, dir });
+    return renderMarkdownFile({ text: result.text, repo, rev, dir });
   }
 
   // Text that is not a document: a `.js`, a `.css`, JSON, YAML, a `.txt` note, a

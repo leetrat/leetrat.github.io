@@ -72,15 +72,19 @@ function prepareDocument(html, { baseHref, repoPrefix }) {
 /**
  * Write a repository's HTML over this page.
  *
+ * `rev` is the commit the document was fetched at, not the branch that was asked
+ * for. The `<base>` has to point at the same revision as the bytes, or a document
+ * and the CSS it links would come from two different pushes.
+ *
  * `stop` is called first, so the router stops swallowing clicks and the history
  * stops belonging to this site before the document claims both.
  */
-export function serveDocument(html, { repo, branch, path, stop }) {
+export function serveDocument(html, { repo, rev, path, stop }) {
   const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
 
   const doc = prepareDocument(html, {
-    baseHref: cdnDirUrl(repo, branch, dir),
-    repoPrefix: cdnDirUrl(repo, branch, ''),
+    baseHref: cdnDirUrl(repo, rev, dir),
+    repoPrefix: cdnDirUrl(repo, rev, ''),
   });
 
   stop();

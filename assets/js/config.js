@@ -123,6 +123,12 @@ export const CONFIG = {
     cdn: 'https://cdn.jsdelivr.net/gh',
     /** Same bytes, used when the CDN does not have the branch yet. */
     raw: 'https://raw.githubusercontent.com',
+    /**
+     * Branch -> commit. Only used to build a URL the CDN can cache correctly; its
+     * 60 requests an hour per IP is why the lookup is optional and the branch name
+     * is a working fallback rather than a hard dependency.
+     */
+    api: 'https://api.github.com',
   },
 
   serve: {
